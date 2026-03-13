@@ -26,7 +26,7 @@ class LocalLLM(BaseLLM):
                 json={
                     "model": "tinyllama",
                     "prompt": prompt,
-                    "stream": False,
+                    "stream": True,
                     "options": {
                         "num_predict": max_tokens,
                         "temperature": 0.2
