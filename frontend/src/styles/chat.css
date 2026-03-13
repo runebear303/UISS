@@ -1,0 +1,45 @@
+/* --- TYPEWRITER & CURSOR ANIMATION --- */
+
+/* This matches the logic we put in Message.jsx */
+.message.assistant .bubble,
+.message-container.assistant .message-bubble {
+    background-color: #262626;
+    /* Matches your existing AI bubble */
+    color: #ffffff;
+    /* Keep text white for dark mode */
+    border-radius: 12px;
+    padding: 12px;
+    margin: 8px 0;
+    border: 1px solid #444;
+    /* Slightly brighter border */
+    line-height: 1.5;
+}
+
+/* The blinking cursor */
+.cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background-color: #4f46e5;
+    /* Using your Indigo button color for the cursor! */
+    margin-left: 4px;
+    vertical-align: middle;
+    animation: blink 0.7s infinite;
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0;
+    }
+}
+
+/* Ensure the typing indicator dots match the theme */
+.bubble.typing span {
+    background-color: #4f46e5 !important;
+}

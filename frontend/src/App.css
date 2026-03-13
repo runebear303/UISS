@@ -1,0 +1,18 @@
+/* App.css - Brute Force Reset */
+
+#root {
+  max-width: 100% !important;
+  /* Overrides the 1280px limit */
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  background-color: #000000 !important;
+}
+
+/* This targets the white space you see at the top */
+.chat-page {
+  background-color: #000000 !important;
+  min-height: 100vh;
+}

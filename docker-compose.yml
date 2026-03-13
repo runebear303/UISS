@@ -1,0 +1,61 @@
+﻿version: "3.9"
+
+services:
+
+  mysql:
+    image: mysql:8
+    container_name: uiss_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: uiss_db
+      MYSQL_USER: uiss_user
+      MYSQL_PASSWORD: uiss_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  ollama:
+    image: ollama/ollama
+    container_name: uiss_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: uiss_backend
+    depends_on:
+      - mysql
+      - ollama
+    ports:
+      - "8000:8000"
+    environment:
+      ENV: docker
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: uiss_user
+      DB_PASS: uiss_password
+      DB_NAME: uiss_db
+      OLLAMA_URL: http://ollama:11434/api/generate
+      SECRET_KEY: super_secure_key
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: uiss_frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  mysql_data:
+  ollama_data:

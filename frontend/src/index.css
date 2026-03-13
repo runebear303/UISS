@@ -1,0 +1,28 @@
+/* index.css */
+
+:root {
+  background-color: #000000;
+  /* Total black */
+  color: white;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  display: block;
+  /* Removes the "centered" squish effect */
+  min-height: 100vh;
+  background-color: #000000;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
+
+/* Ensure no default themes override your settings */
+* {
+  box-sizing: border-box;
+}
