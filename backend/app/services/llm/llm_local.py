@@ -24,7 +24,7 @@ class LocalLLM(BaseLLM):
             response = requests.post(
                 OLLAMA_URL,
                 json={
-                    "model": LOCAL_MODEL_NAME,
+                    "model": "tinyllama",
                     "prompt": prompt,
                     "stream": False,
                     "options": {
