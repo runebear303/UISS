@@ -84,7 +84,7 @@ def ask_llm_stream(prompt: str):
     try:
         # We use the client initialized at the top of this file
         stream = ollama_client.generate(
-            model='llama3',
+            model='phi3',
             prompt=prompt,
             stream=True,
             options={"temperature": 0.2}
