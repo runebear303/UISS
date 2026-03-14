@@ -1,4 +1,5 @@
 ﻿from app.database.db import engine, Base
+from app.database import model
 from fastapi import Depends
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
