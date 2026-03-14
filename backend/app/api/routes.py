@@ -31,26 +31,21 @@ MAX_INPUT_CHARS = 1000
 async def chat(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
     query = request.question.strip()
 
+    # 1. Basis Validatie
     if not query:
         raise HTTPException(status_code=400, detail="Vraag is leeg")
-
     if len(query) > MAX_INPUT_CHARS:
         raise HTTPException(status_code=413, detail="Input te lang")
 
-    # 1. Beveiligingscheck
-    user_ip = http_request.client.host
-    status, reason = detect_prompt_injection(query, user_ip)
-
-    if status == "BLOCKED":
-        raise HTTPException(status_code=400, detail=f"Toegang geweigerd: {reason}")
-
-    if status == "SUSPICIOUS":
-        query = sanitize_prompt(query)
-
-    # 2. AI Verwerking (Zorg dat ask_ai_with_sources intern secure_rag_prompt gebruikt)
+    # 2. AI Verwerking 
+    # De injectie-detectie en sanitization gebeuren BINNEN ask_ai_with_sources
     result = ask_ai_with_sources(db, query)
 
-    # 3. Opslaan in database
+    # 3. Check of de AI-service een blokkade heeft geretourneerd
+    if result.get("security_blocked"):
+        raise HTTPException(status_code=400, detail=result["answer"])
+
+    # 4. Opslaan in database (alleen als het niet geblokkeerd is)
     try:
         create_message(db, conversation_id=request.conversation_id, role="user", content=query)
         create_message(db, conversation_id=request.conversation_id, role="assistant", content=result["answer"])
