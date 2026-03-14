@@ -26,44 +26,48 @@ cloud_llm = CloudLLM()
 # ===============================
 # MAIN AI SERVICE
 # ===============================
-
 def ask_ai_with_sources(db: Session, vraag: str):
-
+    # Alles binnen de functie heeft minimaal 1 TAB (4 spaties)
     provider = None
     usage = None
     cost = 0.0
     confidence = 0.0
     docs = []
+    antwoord = ""
 
     # ===============================
     # 1️⃣ Prompt Injection Detectie
     # ===============================
+    # We vangen de status op uit de tuple die security.py teruggeeft
+    status, reason = detect_prompt_injection(vraag)
 
-    if detect_prompt_injection(vraag):
+    if status == "BLOCKED":
+        provider = "blocked_injection"
+        antwoord = "Je vraag bevat mogelijk onveilige instructies en is geblokkeerd."
 
-     provider = "blocked_injection"
-     antwoord = "Je vraag bevat mogelijk onveilige instructies en is geblokkeerd."
+        # Deze regels horen bij de IF en hebben 2 TABS (8 spaties)
+        try:
+            log_chat(
+                db=db,
+                prompt=vraag,
+                response=antwoord,
+                provider=provider
+            )
+        except Exception as e:
+            print("Security log failed:", e)
 
-    try:
-        log_chat(
-            db=db,
-            prompt=vraag,
-            response=antwoord,
-            provider=provider
-        )
-    except Exception as e:
-        print("Security log failed:", e)
+        # De return moet IN de IF staan om de rest van de functie te stoppen
+        return {
+            "answer": antwoord,
+            "sources": [],
+            "confidence": 0.0,
+            "usage": None,
+            "cost": 0.0,
+            "provider": provider,
+            "security_blocked": True,
+            "latency_ms": 0
+        }
 
-    return {
-        "answer": antwoord,
-        "sources": [],
-        "confidence": 0.0,
-        "usage": None,
-        "cost": 0.0,
-        "provider": provider,
-        "security_blocked": True,
-        "latency_ms": 0
-    }
 
     # ===============================
     # 2️⃣ Sanitization
