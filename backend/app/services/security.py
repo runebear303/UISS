@@ -18,65 +18,73 @@ STRICT_PATTERNS = [
 ]
 
 # ==============================
-# 1. DE VEILIGHEIDSKLEP VOOR DE GEBRUIKER (STRENG)
+# 1. FUNCTIES VOOR ROUTES.PY
 # ==============================
 
-def validate_user_query(query: str, user_ip: Optional[str] = None) -> Tuple[bool, str]:
+def detect_prompt_injection(query: str, user_ip: Optional[str] = None) -> Tuple[str, str]:
     """
-    Controleert de vraag van de student op kwaadaardige intenties.
+    Controleert de vraag op kwaadaardige intenties.
+    Returns: (status, reason) -> status is "SAFE", "SUSPICIOUS", of "BLOCKED"
     """
     normalized = unicodedata.normalize("NFKC", query).lower()
 
     # Check op lengte
     if len(normalized) > MAX_QUERY_LENGTH:
-        return False, "Vraag is te lang."
+        return "BLOCKED", "Vraag is te lang."
 
     # Check op agressieve patronen
     for pattern in STRICT_PATTERNS:
         if re.search(pattern, normalized):
-            return False, f"Onveilige instructie gedetecteerd."
+            return "BLOCKED", "Onveilige instructie gedetecteerd."
 
-    return True, "SAFE"
+    # Als het door de eerste checks komt maar veel vreemde tekens bevat
+    # zou je het als "SUSPICIOUS" kunnen markeren.
+    return "SAFE", "OK"
+
+def sanitize_prompt(query: str) -> str:
+    """
+    Schoont de tekst op (bijv. bij status SUSPICIOUS).
+    """
+    # Verwijder overtollige witruimte en normaliseer karakters
+    return unicodedata.normalize("NFKC", query).strip()
 
 # ==============================
-# 2. DE FILTER VOOR BOEKEN/RAG (MILDE)
+# 2. FILTER VOOR BOEKEN/RAG (MILDE)
 # ==============================
 
 def sanitize_rag_context(context_text: str) -> str:
     """
-    Schoont tekst uit PDF-boeken op zodat deze de AI niet verwart,
-    zonder de inhoud te blokkeren.
+    Schoont tekst uit PDF-boeken op zodat deze de AI niet verwart.
     """
     # 1. Normaliseer (verwijder vreemde verborgen tekens uit PDF's)
     clean_text = unicodedata.normalize("NFKC", context_text)
     
-    # 2. Verwijder specifieke AI-tags die in boeken kunnen staan (bijv. "System:", "User:")
-    # We vervangen ze door een onschadelijk woord zodat de zin blijft lopen.
+    # 2. Verwijder specifieke AI-tags
     tags_to_remove = [r"(?i)system:", r"(?i)assistant:", r"(?i)user:", r"(?i)role:"]
     for pattern in tags_to_remove:
         clean_text = re.sub(pattern, "[info]", clean_text)
 
-    # 3. Kap af op de maximale lengte om resource-overbelasting te voorkomen
+    # 3. Kap af op de maximale lengte
     return clean_text[:MAX_CONTEXT_LENGTH].strip()
 
 # ==============================
-# 3. DE COMBINATIE (HOOFDFUNCTIE)
+# 3. DE COMBINATIE (STRATEGISCHE PROMPT)
 # ==============================
 
 def secure_rag_prompt(user_query: str, retrieved_context: str) -> Optional[str]:
     """
     Bouwt een veilige prompt door de vraag te valideren en de context te isoleren.
+    Gebruik deze functie in je ai_service.py voor maximale veiligheid.
     """
     # Stap A: Valideer de vraag
-    is_safe, message = validate_user_query(user_query)
-    if not is_safe:
-        return None # Hier zou je een foutmelding naar de frontend sturen
+    status, reason = detect_prompt_injection(user_query)
+    if status == "BLOCKED":
+        return None 
 
     # Stap B: Schoon de boektekst op
     safe_context = sanitize_rag_context(retrieved_context)
 
     # Stap C: Bouw de prompt met "Delimiters" (isolatie)
-    # Dit dwingt de AI om de context als DATA te zien en niet als BEVEL.
     final_prompt = f"""Beantwoord de vraag van de gebruiker strikt op basis van de onderstaande brontekst. 
 Indien het antwoord niet in de bron staat, zeg dit dan eerlijk.
 

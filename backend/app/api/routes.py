@@ -16,7 +16,7 @@ from app.config import MAX_INPUT_CHARS
 from app.crud.crud_conversation import create_conversation, get_conversations
 from app.crud.crud_messsage import create_message, get_messages
 
-from app.services.security import detect_prompt_injection, sanitize_prompt
+from app.services.security import detect_prompt_injection, sanitize_prompt, secure_rag_prompt
 
 router = APIRouter()
 
@@ -29,14 +29,35 @@ MAX_INPUT_CHARS = 1000
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
-
     query = request.question.strip()
 
     if not query:
-        raise HTTPException(status_code=400, detail="Empty question")
+        raise HTTPException(status_code=400, detail="Vraag is leeg")
 
     if len(query) > MAX_INPUT_CHARS:
-        raise HTTPException(status_code=413, detail="Input too long")
+        raise HTTPException(status_code=413, detail="Input te lang")
+
+    # 1. Beveiligingscheck
+    user_ip = http_request.client.host
+    status, reason = detect_prompt_injection(query, user_ip)
+
+    if status == "BLOCKED":
+        raise HTTPException(status_code=400, detail=f"Toegang geweigerd: {reason}")
+
+    if status == "SUSPICIOUS":
+        query = sanitize_prompt(query)
+
+    # 2. AI Verwerking (Zorg dat ask_ai_with_sources intern secure_rag_prompt gebruikt)
+    result = ask_ai_with_sources(db, query)
+
+    # 3. Opslaan in database
+    try:
+        create_message(db, conversation_id=request.conversation_id, role="user", content=query)
+        create_message(db, conversation_id=request.conversation_id, role="assistant", content=result["answer"])
+    except Exception as e:
+        print("Geschiedenis opslaan mislukt:", e)
+
+    return result
 
     # =========================
     # PROMPT SECURITY CHECK
@@ -93,14 +114,41 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest, http_request: Request):
-
     query = request.question.strip()
 
-    if not query:
-        raise HTTPException(status_code=400, detail="Empty question")
+    # 1. Basis validatie
+    if not query or len(query) > MAX_INPUT_CHARS:
+        raise HTTPException(status_code=400, detail="Ongeldige invoer")
 
-    if len(query) > MAX_INPUT_CHARS:
-        raise HTTPException(status_code=413, detail="Input too long")
+    # 2. Beveiligingscheck
+    user_ip = http_request.client.host
+    status, reason = detect_prompt_injection(query, user_ip)
+
+    if status == "BLOCKED":
+        raise HTTPException(status_code=400, detail="Onveilige vraag gedetecteerd")
+
+    # 3. RAG Zoekopdracht
+    docs = search_docs(query)
+    if not docs:
+        async def empty_stream():
+            yield "Ik kon geen relevante informatie vinden in de UNASAT boeken."
+        return StreamingResponse(empty_stream(), media_type="text/plain")
+
+    # 4. Veilige Prompt Constructie
+    context_text = "\n\n".join([doc["text"] for doc in docs])
+    
+    # Gebruik de nieuwe secure_rag_prompt functie!
+    final_prompt = secure_rag_prompt(query, context_text)
+    
+    if not final_prompt:
+        raise HTTPException(status_code=400, detail="Fout bij het genereren van veilige prompt")
+
+    # 5. Streaming naar Ollama
+    async def stream_generator():
+        for token in ask_llm_stream(final_prompt):
+            yield token
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
     # =========================
     # PROMPT SECURITY CHECK
