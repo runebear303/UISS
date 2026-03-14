@@ -1,5 +1,4 @@
 ﻿services:
-
   mysql:
     image: mysql:8
     container_name: uiss_mysql
@@ -43,6 +42,8 @@
       SECRET_KEY: super_secure_key
     volumes:
       - ./backend:/app
+      # Dit voorkomt dat je lokale venv de libraries in de container overschrijft:
+      - /app/venv
 
   frontend:
     build:
@@ -53,6 +54,14 @@
       - backend
     ports:
       - "3000:3000"
+    environment:
+      # Dit dwingt de frontend om vaker te checken op wijzigingen (nodig voor Windows):
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app
+      # Dit zorgt ervoor dat de node_modules van de container gebruikt worden, niet die van je desktop:
+      - /app/node_modules
 
 volumes:
   mysql_data:
