@@ -42,3 +42,14 @@ def authenticate(db: Session, username: str, password: str):
     }
 
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def decode_token(token: str):
+    """
+    Decodeert de JWT token en geeft de inhoud (payload) terug.
+    Dit wordt gebruikt door de dependencies om te checken of je admin bent.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        return None
