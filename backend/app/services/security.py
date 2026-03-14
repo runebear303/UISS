@@ -20,6 +20,7 @@ STRICT_PATTERNS = [
 # ==============================
 # 1. FUNCTIES VOOR ROUTES.PY
 # ==============================
+SAFE_TERMS = ["unasat", "uiss", "opleiding", "inschrijven", "locatie", "contact"]
 
 def detect_prompt_injection(query: str, user_ip: Optional[str] = None) -> Tuple[str, str]:
     """
@@ -27,6 +28,9 @@ def detect_prompt_injection(query: str, user_ip: Optional[str] = None) -> Tuple[
     Returns: (status, reason) -> status is "SAFE", "SUSPICIOUS", of "BLOCKED"
     """
     normalized = unicodedata.normalize("NFKC", query).lower()
+    
+    if any(term in normalized for term in SAFE_TERMS):
+        return "SAFE", "OK"
 
     # Check op lengte
     if len(normalized) > MAX_QUERY_LENGTH:
@@ -85,8 +89,9 @@ def secure_rag_prompt(user_query: str, retrieved_context: str) -> Optional[str]:
     safe_context = sanitize_rag_context(retrieved_context)
 
     # Stap C: Bouw de prompt met "Delimiters" (isolatie)
-    final_prompt = f"""Beantwoord de vraag van de gebruiker strikt op basis van de onderstaande brontekst. 
-Indien het antwoord niet in de bron staat, zeg dit dan eerlijk.
+    final_prompt = f"""Je bent de officiële assistent van UNASAT. 
+Beantwoord de vraag van de student bij voorkeur op basis van de brontekst, 
+maar je mag ook algemene informatie over UNASAT geven als dat de student helpt.
 
 BRONMATERIAAL_START
 {safe_context}
@@ -95,6 +100,7 @@ BRONMATERIAAL_END
 GEBRUIKERSVRAAG: {user_query}
 
 ANTWOORD:"""
+   
     
     return final_prompt
     
