@@ -1,51 +1,44 @@
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 import os
-import secrets
+import bcrypt
+from sqlalchemy.orm import Session
+from app.database.model import User  # Zorg dat dit pad klopt
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
-
-ADMIN_USER = os.getenv("ADMIN_USER")
-ADMIN_PASS = os.getenv("ADMIN_PASS")
 TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", 2))
 
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY environment variable is not set")
 
-if not ADMIN_USER or not ADMIN_PASS:
-    raise ValueError("Admin credentials are not properly configured")
-
-
-def authenticate(username: str, password: str):
+def authenticate(db: Session, username: str, password: str):
     """
-    Authenticeert admin gebruiker en genereert JWT.
+    Controleert de gebruiker tegen de database en geeft een JWT terug.
     """
+    # 1. Zoek de gebruiker in de MySQL database
+    user = db.query(User).filter(User.username == username).first()
 
-    if not (
-        secrets.compare_digest(username, ADMIN_USER) and
-        secrets.compare_digest(password, ADMIN_PASS)
-    ):
+    if not user:
+        print(f"Inlogpoging mislukt: Gebruiker {username} niet gevonden.")
         return None
 
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    # 2. Controleer of het wachtwoord klopt met de opgeslagen hash
+    # We zetten de strings om naar bytes met .encode('utf-8')
+    password_byte = password.encode('utf-8')
+    hashed_byte = user.hashed_password.encode('utf-8')
 
+    if not bcrypt.checkpw(password_byte, hashed_byte):
+        print(f"Inlogpoging mislukt: Wachtwoord onjuist voor {username}.")
+        return None
+
+    # 3. Genereer de token als alles klopt
+    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
     payload = {
-        "sub": username,
-        "role": "admin",
+        "sub": user.username,
+        "role": user.role,
         "iat": datetime.utcnow(),
         "exp": expire
     }
 
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-
-
-def decode_token(token: str):
-    """
-    Decodeert JWT en retourneert payload indien geldig.
-    """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        return None

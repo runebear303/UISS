@@ -206,11 +206,18 @@ Instructies:
 # LOGIN
 # ======================================
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database.db import get_db  # Importeer je database sessie generator
+# Zorg dat je ook de nieuwe authenticate import uit je auth service
+
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest):
-    token = authenticate(request.username, request.password)
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    # We geven nu 'db' mee aan de authenticate functie
+    token = authenticate(db, request.username, request.password)
 
     if not token:
+        # Hier komt nu die "Invalid credentials" vandaan als de hash niet klopt
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return {"access_token": token, "token_type": "bearer"}
