@@ -18,7 +18,7 @@ def create_admin():
 
     # Jouw gegevens
     username = "admin"
-    password = "WelkomUISS2026!" 
+    password = "uissPass" 
     
     # Wachtwoord hashen
     hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
