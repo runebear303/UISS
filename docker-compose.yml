@@ -23,7 +23,7 @@
 
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile.backend
     container_name: uiss_backend
     depends_on:
