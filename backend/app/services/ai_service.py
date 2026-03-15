@@ -122,7 +122,20 @@ def ask_ai_with_sources(db: Session, vraag: str):
     # 5️⃣ Confidence Score
     # ===============================
 
-    confidence = sum(d.get("score", 0) for d in docs) / len(docs)
+    if not docs:
+        confidence = 0.0
+    else:
+        # We controleren per item of het een dictionary is
+        scores = []
+        for d in docs:
+            if isinstance(d, dict):
+                scores.append(d.get("score", 0))
+            else:
+                # Als het een string is, hebben we geen score, dus 0
+                scores.append(0)
+        
+        confidence = sum(scores) / len(docs)
+    
     confidence = round(confidence, 2)
 
     # ===============================
