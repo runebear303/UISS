@@ -1,57 +1,44 @@
+import bcrypt
 from sqlalchemy.orm import Session
 from app.database.db import SessionLocal, engine, Base
 from app.database.model import User, Document
-from passlib.context import CryptContext
 
-# Wachtwoord hashing (moet matchen met je auth service)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
+def hash_password(password: str) -> str:
+    """Maakt een veilige bcrypt hash van een wachtwoord string."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 def seed_data():
     db = SessionLocal()
     try:
-        # 1. Maak de tabellen aan als ze nog niet bestaan
+        # 1. Zorg dat tabellen bestaan
         Base.metadata.create_all(bind=engine)
 
-        # 2. Voeg Admin toe (als deze nog niet bestaat)
-        admin_exists = db.query(User).filter(User.username == "admin").first()
-        if not admin_exists:
-            admin_user = User(
+        # 2. Admin account
+        admin_user = db.query(User).filter(User.username == "admin").first()
+        if not admin_user:
+            new_admin = User(
                 username="admin",
-                hashed_password=get_password_hash("admin123"), # Wijzig dit later!
+                hashed_password=hash_password("admin123"),
                 role="admin"
             )
-            db.add(admin_user)
-            print("✅ Admin account aangemaakt: admin / admin123")
-        else:
-            print("ℹ️ Admin account bestond al.")
-
-        # 3. Voeg Test Documenten toe voor RAG
-        doc_count = db.query(Document).count()
-        if doc_count == 0:
-            test_docs = [
-                Document(
-                    title="UNASAT Reglement",
-                    source="reglement_2026.pdf",
-                    text="Studenten moeten minimaal 80% aanwezigheid hebben bij hoorcolleges."
-                ),
-                Document(
-                    title="UISS Handleiding",
-                    source="uiss_guide.txt",
-                    text="De UISS chatbot helpt studenten bij het vinden van antwoorden op vragen over de opleiding."
-                )
-            ]
-            db.add_all(test_docs)
-            print(f"✅ {len(test_docs)} test documenten toegevoegd.")
-        else:
-            print(f"ℹ️ Er stonden al {doc_count} documenten in de database.")
+            db.add(new_admin)
+            print("✅ Admin aangemaakt (admin / admin123)")
+        
+        # 3. Test data voor RAG
+        if db.query(Document).count() == 0:
+            test_doc = Document(
+                title="UNASAT Intro",
+                source="seed",
+                text="Welkom bij UNASAT. De aanwezigheidsplicht voor technische vakken is 80%."
+            )
+            db.add(test_doc)
+            print("✅ Test document toegevoegd")
 
         db.commit()
-
     except Exception as e:
-        print(f"❌ Fout bij seeden: {e}")
+        print(f"❌ Seed fout: {e}")
         db.rollback()
     finally:
         db.close()

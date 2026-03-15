@@ -1,53 +1,40 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 import os
 import bcrypt
 from sqlalchemy.orm import Session
-from app.database.model import User  # Zorg dat dit pad klopt
+from app.database.model import User
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", 2))
+TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", 24)) # 24 uur is fijner tijdens dev
 
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is not set")
+def create_access_token(data: dict):
+    """Genereert een JWT token op basis van meegegeven data."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    to_encode.update({
+        "iat": datetime.now(timezone.utc),
+        "exp": expire
+    })
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def authenticate(db: Session, username: str, password: str):
-    """
-    Controleert de gebruiker tegen de database en geeft een JWT terug.
-    """
-    # 1. Zoek de gebruiker in de MySQL database
+    """Controleert de gebruiker en geeft een token terug."""
     user = db.query(User).filter(User.username == username).first()
 
     if not user:
-        print(f"Inlogpoging mislukt: Gebruiker {username} niet gevonden.")
         return None
 
-    # 2. Controleer of het wachtwoord klopt met de opgeslagen hash
-    # We zetten de strings om naar bytes met .encode('utf-8')
-    password_byte = password.encode('utf-8')
-    hashed_byte = user.hashed_password.encode('utf-8')
-
-    if not bcrypt.checkpw(password_byte, hashed_byte):
-        print(f"Inlogpoging mislukt: Wachtwoord onjuist voor {username}.")
+    # bcrypt check
+    if not bcrypt.checkpw(password.encode('utf-8'), user.hashed_password.encode('utf-8')):
         return None
 
-    # 3. Genereer de token als alles klopt
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload = {
-        "sub": user.username,
-        "role": user.role,
-        "iat": datetime.utcnow(),
-        "exp": expire
-    }
-
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    # Gebruik de nieuwe functie voor de token
+    token_data = {"sub": user.username, "role": user.role}
+    return create_access_token(token_data)
 
 def decode_token(token: str):
-    """
-    Decodeert de JWT token en geeft de inhoud (payload) terug.
-    Dit wordt gebruikt door de dependencies om te checken of je admin bent.
-    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
