@@ -12,6 +12,8 @@
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./backend/app/data:/app/app/data
+      - ./backend/app/source/docs:/app/app/source/docs
 
   ollama:
     image: ollama/ollama

@@ -1,14 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-
 from app.models.schemas import ChatRequest, ChatResponse, LoginRequest, TokenResponse
 from app.services.ai_service import ask_ai_with_sources
 from app.services.auth import authenticate
 from app.services.dependencies import verify_admin
 from app.services.monitor import system_stats
 from app.services.metrics import get_ai_metrics
-from app.services.logger import log_chat, log_system_alert, log_ai_usage, get_logs, get_security_events, get_monitoring_stats
 from app.services.llm.llm_orchestrator import ask_llm_stream
 from app.rag.rag import search_docs
 from app.database.db import get_db
@@ -27,9 +25,6 @@ from app.services.logger import (
 from app.services.security import detect_prompt_injection, sanitize_prompt, secure_rag_prompt
 
 router = APIRouter()
-
-MAX_INPUT_CHARS = 1000
-
 
 # ======================================
 # CHAT
@@ -126,11 +121,6 @@ async def chat_stream(request: ChatRequest, http_request: Request, db: Session =
 # ======================================
 # LOGIN
 # ======================================
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.database.db import get_db  # Importeer je database sessie generator
-# Zorg dat je ook de nieuwe authenticate import uit je auth service
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
