@@ -40,16 +40,23 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
     query = request.question.strip()
     user_ip = http_request.client.host
 
-    # 1. Validatie
+    # 1. Basis Validatie
     if not query:
         raise HTTPException(status_code=400, detail="Vraag is leeg")
-    
-    # 2. Beveiliging (Injection detectie)
+    if len(query) > MAX_INPUT_CHARS:
+        raise HTTPException(status_code=413, detail="Input te lang")
+
+    # 2. Beveiligingscheck (Prompt Injection)
     status, reason = detect_prompt_injection(query, user_ip)
-    if status == "BLOCKED":
-        log_security_event(db, "PROMPT_INJECTION", f"Gebruiker geblokkeerd: {reason}", user_ip)
-        raise HTTPException(status_code=400, detail="Onveilige vraag gedetecteerd")
     
+    if status == "BLOCKED":
+        # Log de aanval voordat we de foutmelding geven
+        log_security_event(db, "PROMPT_INJECTION", f"Geblokkeerd: {reason}", user_ip)
+        raise HTTPException(
+            status_code=400, 
+            detail="Je vraag bevat mogelijk onveilige instructies"
+        )
+
     if status == "SUSPICIOUS":
         query = sanitize_prompt(query)
 
@@ -58,15 +65,16 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 
     # 4. Opslaan in database
     try:
+        # Sla de vraag van de gebruiker op
         create_message(db, conversation_id=request.conversation_id, role="user", content=query)
+        # Sla het antwoord van de AI op
         create_message(db, conversation_id=request.conversation_id, role="assistant", content=result["answer"])
-        # Log ook de technische data
-        log_chat(db, query, result["answer"], result.get("usage", {}), result.get("provider", "local"))
+        # Log de chat voor het admin dashboard
+        log_chat(db, query, result["answer"], result.get("usage", {}), "local")
     except Exception as e:
-        print(f"Fout bij opslaan geschiedenis: {e}")
+        print(f"Database error tijdens opslaan: {e}")
 
     return result
-
     # =========================
     # PROMPT SECURITY CHECK
     # =========================
