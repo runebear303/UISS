@@ -1,6 +1,6 @@
 import os
 from pypdf import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.rag.rag import add_to_index
 
 def process_pdf_to_rag(file_path: str, source_name: str):
