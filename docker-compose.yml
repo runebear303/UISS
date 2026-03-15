@@ -48,7 +48,7 @@
 
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile.frontend
     container_name: uiss_frontend
     depends_on:
