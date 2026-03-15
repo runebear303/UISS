@@ -155,39 +155,43 @@ async def upload_document(
     db: Session = Depends(get_db), 
     user=Depends(verify_admin)
 ):
-    """
-    Uploadt een PDF naar de server en slaat metadata op in de database.
-    De PDF komt in de volume-map terecht zodat RAG erbij kan.
-    """
-    # 1. Pad bepalen (zorg dat deze map bestaat in je container)
+    # 1. Pad bepalen
     upload_dir = "app/source/docs"
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir)
 
     file_path = os.path.join(upload_dir, file.filename)
 
-    # 2. Bestand fysiek opslaan
+    # 2. Bestand opslaan op schijf
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Kon bestand niet opslaan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Opslagfout: {str(e)}")
 
-    # 3. Metadata opslaan in MySQL (zodat de AI weet waar het vandaan komt)
+    # 3. DIRECT VERWERKEN VOOR RAG
+    from app.services.pdf_processor import process_pdf_to_rag
+    chunks_created = process_pdf_to_rag(file_path, file.filename)
+
+    # 4. Database metadata bijwerken
     from app.database.model import Document
     try:
         new_doc = Document(
             title=file.filename,
             source=file.filename,
-            text=f"Inhoud van {file.filename} wordt verwerkt..." # Of trigger hier je PDF-parser
+            text=f"Verwerkt: {chunks_created} segmenten."
         )
         db.add(new_doc)
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"DB Error: {e}")
+        print(f"Database error: {e}")
 
-    return {"message": f"Bestand '{file.filename}' succesvol geüpload naar {upload_dir}"}
+    return {
+        "message": "Upload en verwerking geslaagd", 
+        "filename": file.filename, 
+        "chunks": chunks_created
+    }
 
 # ======================================
 # MONITORING
