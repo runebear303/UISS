@@ -15,7 +15,15 @@ from app.database.db import get_db
 from app.config import MAX_INPUT_CHARS
 from app.crud.crud_conversation import create_conversation, get_conversations
 from app.crud.crud_messsage import create_message, get_messages
-
+from app.services.logger import (
+    log_chat, 
+    log_system_alert, 
+    log_ai_usage, 
+    log_security_event, 
+    get_logs, 
+    get_security_events, 
+    get_monitoring_stats
+)
 from app.services.security import detect_prompt_injection, sanitize_prompt, secure_rag_prompt
 
 router = APIRouter()
@@ -30,27 +38,32 @@ MAX_INPUT_CHARS = 1000
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
     query = request.question.strip()
+    user_ip = http_request.client.host
 
-    # 1. Basis Validatie
+    # 1. Validatie
     if not query:
         raise HTTPException(status_code=400, detail="Vraag is leeg")
-    if len(query) > MAX_INPUT_CHARS:
-        raise HTTPException(status_code=413, detail="Input te lang")
+    
+    # 2. Beveiliging (Injection detectie)
+    status, reason = detect_prompt_injection(query, user_ip)
+    if status == "BLOCKED":
+        log_security_event(db, "PROMPT_INJECTION", f"Gebruiker geblokkeerd: {reason}", user_ip)
+        raise HTTPException(status_code=400, detail="Onveilige vraag gedetecteerd")
+    
+    if status == "SUSPICIOUS":
+        query = sanitize_prompt(query)
 
-    # 2. AI Verwerking 
-    # De injectie-detectie en sanitization gebeuren BINNEN ask_ai_with_sources
+    # 3. AI Verwerking (RAG + LLM)
     result = ask_ai_with_sources(db, query)
 
-    # 3. Check of de AI-service een blokkade heeft geretourneerd
-    if result.get("security_blocked"):
-        raise HTTPException(status_code=400, detail=result["answer"])
-
-    # 4. Opslaan in database (alleen als het niet geblokkeerd is)
+    # 4. Opslaan in database
     try:
         create_message(db, conversation_id=request.conversation_id, role="user", content=query)
         create_message(db, conversation_id=request.conversation_id, role="assistant", content=result["answer"])
+        # Log ook de technische data
+        log_chat(db, query, result["answer"], result.get("usage", {}), result.get("provider", "local"))
     except Exception as e:
-        print("Geschiedenis opslaan mislukt:", e)
+        print(f"Fout bij opslaan geschiedenis: {e}")
 
     return result
 
