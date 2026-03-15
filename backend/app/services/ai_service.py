@@ -27,13 +27,114 @@ cloud_llm = CloudLLM()
 # MAIN AI SERVICE
 # ===============================
 def ask_ai_with_sources(db: Session, vraag: str):
-    # Alles binnen de functie heeft minimaal 1 TAB (4 spaties)
     provider = None
     usage = None
     cost = 0.0
     confidence = 0.0
     docs = []
     antwoord = ""
+    start_time = time.time() # Start timer bovenaan voor latency
+
+    # 1️⃣ Prompt Injection Detectie
+    status, reason = detect_prompt_injection(vraag)
+    if status == "BLOCKED":
+        provider = "blocked_injection"
+        antwoord = "Je vraag bevat mogelijk onveilige instructies en is geblokkeerd."
+        log_chat(db=db, prompt=vraag, response=antwoord, provider=provider)
+        return {
+            "answer": antwoord,
+            "sources": [],
+            "confidence": 0.0,
+            "usage": None,
+            "cost": 0.0,
+            "provider": provider,
+            "latency_ms": 0
+        }
+
+    # 2️⃣ Sanitization & 3️⃣ RAG Retrieval
+    vraag = sanitize_prompt(vraag)
+    docs = search_docs(vraag, k=MAX_CONTEXT_CHUNKS)
+
+    if not docs:
+        provider = "no_context"
+        antwoord = "Dit staat niet in de studentenhandleiding of het orde reglement."
+        log_chat(db=db, prompt=vraag, response=antwoord, provider=provider)
+        return {
+            "answer": antwoord, "sources": [], "confidence": 0.0,
+            "usage": None, "cost": 0.0, "provider": provider, "latency_ms": 0
+        }
+
+    # 4️⃣ Context Limiter & 5️⃣ Confidence Score
+    docs = docs[:MAX_CONTEXT_CHUNKS]
+    context_list = []
+    scores = []
+
+    for d in docs:
+        # Zorg dat we altijd tekst en een score hebben, ongeacht input type
+        text = d.get("text", str(d)) if isinstance(d, dict) else str(d)
+        score = d.get("score", 0) if isinstance(d, dict) else 0
+        context_list.append(text)
+        scores.append(score)
+
+    context = "\n\n".join(context_list)
+    confidence = round(sum(scores) / len(docs), 2) if docs else 0.0
+
+    # 6️⃣ Prompt Constructie
+    prompt = f"Context:\n{context}\n\nVraag: {vraag}"
+
+    try:
+        # 7️⃣ Routing
+        if confidence < CONFIDENCE_THRESHOLD:
+            if get_today_cloud_cost(db) >= DAILY_CLOUD_LIMIT:
+                # Budget error return (Inclusief latency_ms!)
+                latency_ms = int((time.time() - start_time) * 1000)
+                return {
+                    "answer": "Budgetlimiet bereikt.", "sources": [], 
+                    "confidence": confidence, "usage": None, "cost": 0.0, 
+                    "provider": "cloud_budget_exceeded", "latency_ms": latency_ms
+                }
+            result = cloud_llm.generate(prompt)
+            provider = "cloud_low_confidence"
+        else:
+            result = ask_llm(prompt)
+            provider = result.get("provider", "local_orchestrated")
+
+        antwoord = result.get("text", "")
+        usage = result.get("usage")
+        cost = result.get("cost", 0.0)
+
+        # 8️⃣ Hallucination Guardrail
+        if detect_hallucination(antwoord, docs[:3]) or not answer_supported_by_sources(antwoord, docs[:3]):
+            provider = "hallucination_blocked"
+            antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door bronnen."
+
+    except Exception as e:
+        print(f"LLM Error: {e}")
+        provider = "llm_error"
+        antwoord = "Er is een interne fout opgetreden."
+
+    # FINALE FORMATTERING VOOR PYDANTIC
+    latency_ms = int((time.time() - start_time) * 1000)
+    
+    # Cruciaal: Verander strings terug naar dictionaries voor het Response Schema
+    formatted_sources = []
+    for d in docs:
+        if isinstance(d, dict):
+            formatted_sources.append(d)
+        else:
+            formatted_sources.append({"text": str(d), "source_file": "Handleiding"})
+
+    log_chat(db=db, prompt=vraag, response=antwoord, provider=provider, usage=usage, cost=cost)
+
+    return {
+        "answer": antwoord,
+        "sources": formatted_sources,
+        "confidence": confidence,
+        "usage": usage,
+        "cost": cost,
+        "provider": provider,
+        "latency_ms": latency_ms
+    }
 
     # ===============================
     # 1️⃣ Prompt Injection Detectie
