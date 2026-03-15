@@ -91,7 +91,7 @@ MODEL_PROFILE = os.getenv("MODEL_PROFILE", "local")
 
 LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "tinyllama:latest")
 
-DEFAULT_OLLAMA_URL = "http://ollama:11434/api/generate"
+DEFAULT_OLLAMA_URL = "http://uiss_ollama:11434/api/generate"
 
 if ENV == "local":
     DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
