@@ -31,7 +31,7 @@ class LocalLLM(BaseLLM):
                         "temperature": 0.2
                     }
                 },
-                timeout=300
+                timeout=180
             )
 
             response.raise_for_status()
