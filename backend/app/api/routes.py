@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.models.schemas import ChatRequest, ChatResponse, LoginRequest, TokenResponse
@@ -13,6 +13,8 @@ from app.database.db import get_db
 from app.config import MAX_INPUT_CHARS
 from app.crud.crud_conversation import create_conversation, get_conversations
 from app.crud.crud_messsage import create_message, get_messages
+import shutil
+import os
 from app.services.logger import (
     log_chat, 
     log_system_alert, 
@@ -142,6 +144,50 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 def admin_info(user=Depends(verify_admin)):
     return {"username": user["sub"], "role": user.get("role")}
 
+
+# ======================================
+# DOCUMENT MANAGEMENT
+# ======================================
+
+@router.post("/admin/upload")
+async def upload_document(
+    file: UploadFile = File(...), 
+    db: Session = Depends(get_db), 
+    user=Depends(verify_admin)
+):
+    """
+    Uploadt een PDF naar de server en slaat metadata op in de database.
+    De PDF komt in de volume-map terecht zodat RAG erbij kan.
+    """
+    # 1. Pad bepalen (zorg dat deze map bestaat in je container)
+    upload_dir = "app/source/docs"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+
+    file_path = os.path.join(upload_dir, file.filename)
+
+    # 2. Bestand fysiek opslaan
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Kon bestand niet opslaan: {str(e)}")
+
+    # 3. Metadata opslaan in MySQL (zodat de AI weet waar het vandaan komt)
+    from app.database.model import Document
+    try:
+        new_doc = Document(
+            title=file.filename,
+            source=file.filename,
+            text=f"Inhoud van {file.filename} wordt verwerkt..." # Of trigger hier je PDF-parser
+        )
+        db.add(new_doc)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"DB Error: {e}")
+
+    return {"message": f"Bestand '{file.filename}' succesvol geüpload naar {upload_dir}"}
 
 # ======================================
 # MONITORING
