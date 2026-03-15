@@ -109,7 +109,9 @@ async def chat_stream(request: ChatRequest, http_request: Request, db: Session =
 
     # 2. Sla de gebruikersvraag ALVAST op (voordat de stream start)
     try:
-        create_message(db, request.conversation_id, "user", query)
+        conv_id = getattr(request, 'conversation_id', None)
+        if conv_id:
+            create_message(db, conv_id, "user", query)
     except Exception as e:
         print(f"Fout bij opslaan gebruikersvraag: {e}")
 
