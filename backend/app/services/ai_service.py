@@ -116,7 +116,15 @@ def ask_ai_with_sources(db: Session, vraag: str):
         # 8️⃣ Hallucination Guardrail
         # We checken de eerste 3 bronnen voor de meest relevante feiten
         docs_for_check = docs[:3]
-        if detect_hallucination(antwoord, docs_for_check) or not answer_supported_by_sources(antwoord, docs_for_check):
+        
+        hallucination_found = detect_hallucination(antwoord, docs_for_check)
+        support_missing = not answer_supported_by_sources(antwoord, docs_for_check)
+
+        # Deze prints verschijnen in je Docker / VS Code terminal
+        print(f"DEBUG: Hallucination check result: {hallucination_found}")
+        print(f"DEBUG: Support missing result: {support_missing}")
+
+        if hallucination_found or support_missing:
             provider = "hallucination_blocked"
             antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door de beschikbare bronnen."
 
@@ -128,7 +136,6 @@ def ask_ai_with_sources(db: Session, vraag: str):
     # --- Finale Formattering & Opslag ---
     latency_ms = int((time.time() - start_time) * 1000)
     
-    # Maak bronnen Pydantic-vriendelijk (altijd een lijst van dictionaries)
     formatted_sources = []
     for d in docs:
         if isinstance(d, dict):
@@ -136,7 +143,6 @@ def ask_ai_with_sources(db: Session, vraag: str):
         else:
             formatted_sources.append({"text": str(d), "source_file": "Onbekende bron"})
 
-    # Log de chat naar de database (voor je dashboard)
     try:
         log_chat(db=db, prompt=vraag, response=antwoord, provider=provider, usage=usage, cost=cost)
     except Exception as db_e:
