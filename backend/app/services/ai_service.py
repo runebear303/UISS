@@ -107,7 +107,7 @@ def ask_ai_with_sources(db: Session, vraag: str):
         else:
             # Gebruik Lokaal TinyLlama via Orchestrator
             result = ask_llm(prompt)
-            provider = result.get("provider", "local_orchestrated")
+            provider = result.get("provider", "local_tinyllama")
 
         antwoord = result.get("text", "")
         usage = result.get("usage")

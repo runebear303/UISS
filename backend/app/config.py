@@ -79,7 +79,7 @@ MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", 2000))
 # LLM PROVIDER
 # =========================================
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local").lower()
 
 MODEL_PROFILE = os.getenv("MODEL_PROFILE", "local")  
 # local | cloud
