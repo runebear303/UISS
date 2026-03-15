@@ -107,7 +107,16 @@ def ask_ai_with_sources(db: Session, vraag: str):
     # ===============================
 
     docs = docs[:MAX_CONTEXT_CHUNKS]
-    context = "\n\n".join([d["text"] for d in docs])
+
+    context_list = []
+
+    for d in docs:
+     if isinstance(d, dict) and "text" in d:
+        context_list.append(d["text"])
+    else:
+        context_list.append(str(d)) # 
+
+    context = "\n\n".join(context_list)
 
     # ===============================
     # 5️⃣ Confidence Score
