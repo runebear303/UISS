@@ -75,55 +75,7 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         print(f"Database error tijdens opslaan: {e}")
 
     return result
-    # =========================
-    # PROMPT SECURITY CHECK
-    # =========================
-
-    user_ip = http_request.client.host
-
-    status, reason = detect_prompt_injection(query, user_ip)
-
-    if status == "BLOCKED":
-        raise HTTPException(
-            status_code=400,
-            detail="Je vraag bevat mogelijk onveilige instructies"
-        )
-
-    if status == "SUSPICIOUS":
-        query = sanitize_prompt(query)
-
-    # =========================
-    # Ask AI
-    # =========================
-
-    result = ask_ai_with_sources(db, query)
-
-    # =========================
-    # Save conversation history
-    # =========================
-
-    try:
-
-        create_message(
-            db,
-            conversation_id=request.conversation_id,
-            role="user",
-            content=query
-        )
-
-        create_message(
-            db,
-            conversation_id=request.conversation_id,
-            role="assistant",
-            content=result["answer"]
-        )
-
-    except Exception as e:
-        print("Message history insert failed:", e)
-
-    return result
-
-
+  
 # ======================================
 # STREAM CHAT
 # ======================================
@@ -133,80 +85,43 @@ async def chat_stream(request: ChatRequest, http_request: Request, db: Session =
     query = request.question.strip()
     user_ip = http_request.client.host
 
-    # Beveiliging
-    status, _ = detect_prompt_injection(query, user_ip)
+    # 1. Beveiliging & Logging
+    status, reason = detect_prompt_injection(query, user_ip)
     if status == "BLOCKED":
-        raise HTTPException(status_code=400, detail="Beveiligingsrisico")
+        # Log de blokkade in je security_logs tabel
+        log_security_event(db, "PROMPT_INJECTION", f"Stream geblokkeerd: {reason}", user_ip)
+        raise HTTPException(status_code=400, detail="Onveilige vraag gedetecteerd")
 
-    # RAG Zoekopdracht
+    # 2. Sla de gebruikersvraag ALVAST op (voordat de stream start)
+    try:
+        create_message(db, request.conversation_id, "user", query)
+    except Exception as e:
+        print(f"Fout bij opslaan gebruikersvraag: {e}")
+
+    # 3. RAG Zoekopdracht
     docs = search_docs(query)
-    context_text = "\n\n".join([doc["text"] for doc in docs]) if docs else "Geen context gevonden."
+    context_text = "\n\n".join([doc["text"] for doc in docs]) if docs else "Geen relevante documentatie gevonden."
     
+    # Gebruik je beveiligde prompt generator
     final_prompt = secure_rag_prompt(query, context_text)
 
+    # 4. De Stream Generator
     async def stream_generator():
         full_response = ""
-        # Gebruik ASYNC for voor de asynchrone httpx stream
-        async for token in ask_llm_stream(final_prompt):
-            full_response += token
-            yield token
-        
-        # Optioneel: Sla het volledige antwoord op in de DB nadat de stream klaar is
-        # create_message(db, request.conversation_id, "assistant", full_response)
+        try:
+            async for token in ask_llm_stream(final_prompt):
+                full_response += token
+                yield token
+            
+            # 5. Sla het AI-antwoord op NADAT de stream klaar is
+            if full_response:
+                create_message(db, request.conversation_id, "assistant", full_response)
+                # Optioneel: log ook het verbruik
+                log_chat(db, query, full_response, {}, "local-stream")
+        except Exception as e:
+            yield f"\n[Systeemfout: {str(e)}]"
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-    # =========================
-    # PROMPT SECURITY CHECK
-    # =========================
-
-    user_ip = http_request.client.host
-
-    status, reason = detect_prompt_injection(query, user_ip)
-
-    if status == "BLOCKED":
-        raise HTTPException(
-            status_code=400,
-            detail="Je vraag bevat mogelijk onveilige instructies"
-        )
-
-    if status == "SUSPICIOUS":
-        query = sanitize_prompt(query)
-
-    # =========================
-    # RAG SEARCH
-    # =========================
-
-    docs = search_docs(query)
-
-    if not docs:
-        async def empty_stream():
-            yield "Ik kan deze informatie niet vinden in de beschikbare documentatie van UNASAT."
-        return StreamingResponse(empty_stream(), media_type="text/plain")
-
-    context_text = "\n\n".join([doc["text"] for doc in docs])
-
-    prompt = f"""
-Je bent een behulpzame informatie-assistent voor studenten.
-Gebruik de onderstaande tekst om de vraag te beantwoorden.
-
-Beschikbare informatie:
-{context_text}
-
-Vraag: {query}
-
-Instructies:
-- Geef een feitelijk antwoord op basis van de tekst.
-- Als het antwoord er niet in staat, zeg dan dat je het niet weet.
-- Antwoord in het Nederlands.
-"""
-
-    async def stream_generator():
-        for token in ask_llm_stream(prompt):
-            yield token
-
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
 
 # ======================================
 # LOGIN
