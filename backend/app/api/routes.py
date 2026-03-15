@@ -62,6 +62,12 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 
     # 4. Opslaan in database
     try:
+        conv_id = getattr(request, 'conversation_id', None)
+
+        if conv_id:
+            # Sla de berichten alleen op als er een geldige conversatie-ID is
+            create_message(db, conversation_id=conv_id, role="user", content=query)
+            create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
         # Sla de vraag van de gebruiker op
         create_message(db, conversation_id=request.conversation_id, role="user", content=query)
         # Sla het antwoord van de AI op
