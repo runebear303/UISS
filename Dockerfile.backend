@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# 2. Kopieer en installeer requirements
-COPY requirements.txt .
+# 2. Kopieer en installeer requirements vanuit de backend submap
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Kopieer de rest van de code
-COPY . .
+# 3. Kopieer de volledige inhoud van de backend map naar de /app map in de container
+COPY backend/ .
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
