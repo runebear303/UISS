@@ -21,7 +21,7 @@ _model = None
 # Paden naar de bestanden (via Docker Volumes gekoppeld)
 INDEX_FILE = FAISS_PATH
 DOCS_FILE = FAISS_PATH.parent / "docs.pkl"
-
+DIMENSION = 384
 # Global variabelen voor de actieve index in het geheugen
 index = None
 documents = []
@@ -57,11 +57,11 @@ def load_index():
             print(f"✅ FAISS index geladen: {index.ntotal} segmenten beschikbaar.")
         except Exception as e:
             print(f"❌ Fout bij laden index: {e}. Start met lege index.")
-            index = faiss.IndexFlatL2(384)
+            index = faiss.IndexFlatIP(DIMENSION )
             documents = []
     else:
         print("⚠️ Geen bestaande index gevonden. Nieuwe index wordt aangemaakt.")
-        index = faiss.IndexFlatL2(384) # 384 is de dimensie voor MiniLM
+        index = faiss.IndexFlatIP(DIMENSION) # 384 is de dimensie voor MiniLM
         documents = []
 
 # Voer de lader direct uit bij importeren
