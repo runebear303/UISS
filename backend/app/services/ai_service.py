@@ -120,14 +120,13 @@ def ask_ai_with_sources(db: Session, vraag: str):
         hallucination_found = detect_hallucination(antwoord, docs_for_check)
         support_missing = not answer_supported_by_sources(antwoord, docs_for_check)
 
-        # Deze prints verschijnen in je Docker / VS Code terminal
-        print(f"DEBUG: Hallucination check result: {hallucination_found}")
-        print(f"DEBUG: Support missing result: {support_missing}")
+        # Laat de resultaten zien in je terminal
+        print(f"DEBUG: Hallucination: {hallucination_found}, Support Missing: {support_missing}")
 
-        if hallucination_found or support_missing:
-            if False:
-                provider = "hallucination_blocked"
-                antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door de beschikbare bronnen."
+        # We zetten de blokkade TIJDELIJK op False om TinyLlama's antwoord te kunnen zien
+        if False: # hallucination_found or support_missing:
+            provider = "hallucination_blocked"
+            antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door de beschikbare bronnen."
 
     except Exception as e:
         print(f"CRITICAL LLM ERROR: {e}")
@@ -144,8 +143,16 @@ def ask_ai_with_sources(db: Session, vraag: str):
         else:
             formatted_sources.append({"text": str(d), "source_file": "Onbekende bron"})
 
+    # Log de chat naar de database (Stap C fix: gebruik named arguments)
     try:
-        log_chat(db=db, prompt=vraag, response=antwoord, provider=provider, usage=usage, cost=cost)
+        log_chat(
+            db=db, 
+            prompt=vraag, 
+            response=antwoord, 
+            provider=provider, 
+            usage=usage, 
+            cost=cost
+        )
     except Exception as db_e:
         print(f"Database logging failed: {db_e}")
 
