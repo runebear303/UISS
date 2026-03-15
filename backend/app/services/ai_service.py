@@ -125,8 +125,9 @@ def ask_ai_with_sources(db: Session, vraag: str):
         print(f"DEBUG: Support missing result: {support_missing}")
 
         if hallucination_found or support_missing:
-            provider = "hallucination_blocked"
-            antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door de beschikbare bronnen."
+            if False:
+                provider = "hallucination_blocked"
+                antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door de beschikbare bronnen."
 
     except Exception as e:
         print(f"CRITICAL LLM ERROR: {e}")
