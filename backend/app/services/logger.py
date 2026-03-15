@@ -8,23 +8,37 @@ from app.database.model import ChatLog, SystemLog, SecurityLog, AIMetric, Conver
 # =========================
 def log_chat(
     db: Session,
-    prompt: str,
+    prompt: any, # Veranderd naar any voor robuustheid
     response: str,
     provider: str,
     usage: dict | None = None,
     cost: float = 0.0
 ):
+    # --- STAP C FIX: VEILIGHEID ---
+    # Forceer prompt en response naar string. 
+    # Dit voorkomt dat Pydantic objecten de DB laten crashen.
+    clean_prompt = str(prompt)
+    clean_response = str(response)
+
+    # Zorg dat usage ALTIJD een dictionary is, ook als er None of een string komt
+    safe_usage = usage if isinstance(usage, dict) else {}
+
     chat = ChatLog(
-        prompt=prompt,
-        response=response,
+        prompt=clean_prompt,
+        response=clean_response,
         provider=provider,
-        prompt_tokens=usage.get("prompt_tokens", 0) if usage else 0,
-        completion_tokens=usage.get("completion_tokens", 0) if usage else 0,
-        total_tokens=usage.get("total_tokens", 0) if usage else 0,
+        prompt_tokens=safe_usage.get("prompt_tokens", 0),
+        completion_tokens=safe_usage.get("completion_tokens", 0),
+        total_tokens=safe_usage.get("total_tokens", 0),
         cost=cost
     )
-    db.add(chat)
-    db.commit()
+    
+    try:
+        db.add(chat)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"DATABASE ERROR in log_chat: {e}")
 
 # =========================
 # SYSTEM LOGGING
@@ -46,14 +60,21 @@ def log_security_event(db: Session, event_type: str, message: str, ip_address: s
 # AI USAGE LOGGING
 # =========================
 def log_ai_usage(db: Session, provider: str, usage: dict | None = None, cost: float = 0.0):
+    # Ook hier veiligheid toevoegen voor de usage dictionary
+    safe_usage = usage if isinstance(usage, dict) else {}
+    
     ai_log = AIMetric(
         provider=provider,
         total_requests=1,
-        total_tokens=usage.get("total_tokens", 0) if usage else 0,
+        total_tokens=safe_usage.get("total_tokens", 0),
         total_cost=cost
     )
-    db.add(ai_log)
-    db.commit()
+    try:
+        db.add(ai_log)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"DATABASE ERROR in log_ai_usage: {e}")
 
 # =========================
 # MONITORING STATS
