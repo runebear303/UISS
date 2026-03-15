@@ -12,8 +12,6 @@
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./backend/app/data:/app/app/data
-      - ./backend/app/source/docs:/app/app/source/docs
 
   ollama:
     image: ollama/ollama
@@ -25,7 +23,7 @@
 
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.backend
     container_name: uiss_backend
     depends_on:
@@ -44,8 +42,9 @@
       SECRET_KEY: super_secure_key
     volumes:
       - ./backend:/app
-      # Dit voorkomt dat je lokale venv de libraries in de container overschrijft:
       - /app/venv
+      - ./backend/app/data:/app/app/data # Voor je FAISS index (.faiss en .pkl)
+      - ./backend/app/source/docs:/app/app/source/docs
 
   frontend:
     build:
