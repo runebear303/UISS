@@ -1,24 +1,18 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# system dependencies
+# 1. Installeer systeem-afhankelijkheden (nodig voor FAISS en andere AI tools)
 RUN apt-get update && apt-get install -y \
     build-essential \
-    default-libmysqlclient-dev \
-    curl \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# copy requirements
-COPY backend/requirements.txt .
+WORKDIR /app
 
+# 2. Kopieer en installeer requirements
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# copy backend code
-COPY backend /app
+# 3. Kopieer de rest van de code
+COPY . .
 
-# expose FastAPI
-EXPOSE 8000
-
-# run server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
