@@ -113,7 +113,7 @@ def ask_ai_with_sources(db: Session, vraag: str):
     for d in docs:
      if isinstance(d, dict) and "text" in d:
         context_list.append(d["text"])
-    else:
+     else:
         context_list.append(str(d)) # 
 
     context = "\n\n".join(context_list)
