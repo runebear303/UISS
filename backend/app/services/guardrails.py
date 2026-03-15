@@ -1,7 +1,7 @@
 import re
 
 # Iets lager zetten voor lokale modellen die natuurlijke zinnen maken
-MIN_FACT_MATCH = 0.10 
+MIN_FACT_MATCH = 0.05 
 
 # Lijst met woorden die we NIET meetellen voor de ondersteuning
 STOP_WORDS = {"de", "het", "een", "is", "zijn", "en", "van", "in", "op", "met", "voor", "aan"}

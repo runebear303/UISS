@@ -67,7 +67,17 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         # Sla het antwoord van de AI op
         create_message(db, conversation_id=request.conversation_id, role="assistant", content=result["answer"])
         # Log de chat voor het admin dashboard
-        log_chat(db, query, result["answer"], result.get("usage", {}), "local")
+        log_chat(
+              db=db, 
+            prompt=query, 
+            response=result["answer"], 
+            provider="local", 
+            usage=result.get("usage", {}), 
+            cost=result.get("cost", 0.0)
+        )
+           
+           
+        
     except Exception as e:
         print(f"Database error tijdens opslaan: {e}")
 
