@@ -2,16 +2,15 @@ FROM node:20
 
 WORKDIR /app
 
+# Kopieer vanuit de frontend map in de root naar de container
 COPY frontend/package*.json ./
 
 RUN npm install
 
+# Kopieer de rest van de frontend code
 COPY frontend/ .
-
-RUN npm run build
-
-RUN npm install -g serve
 
 EXPOSE 3000
 
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Start de dev-server in plaats van 'serve'
+CMD ["npm", "start"]
