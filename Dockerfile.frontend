@@ -13,4 +13,4 @@ COPY frontend/ .
 EXPOSE 3000
 
 # Start de dev-server in plaats van 'serve'
-CMD ["npm", "start"]
+CMD ["npm", "run", "dev", "--", "--host", "--port", "3000"]
