@@ -62,29 +62,31 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 
     # 4. Opslaan in database
     try:
+        # Gebruik getattr om veilig de ID te zoeken. 
+        # Als de frontend het niet stuurt, wordt conv_id None.
         conv_id = getattr(request, 'conversation_id', None)
 
         if conv_id:
             # Sla de berichten alleen op als er een geldige conversatie-ID is
             create_message(db, conversation_id=conv_id, role="user", content=query)
             create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
-        # Sla de vraag van de gebruiker op
-        create_message(db, conversation_id=request.conversation_id, role="user", content=query)
-        # Sla het antwoord van de AI op
-        create_message(db, conversation_id=request.conversation_id, role="assistant", content=result["answer"])
-        # Log de chat voor het admin dashboard
+            print(f"DEBUG: Berichten opgeslagen voor conversatie {conv_id}")
+        else:
+            # Dit gebeurt als je direct via /chat test zonder een gesprek te starten
+            print("DEBUG: Geen conversation_id gevonden, Message tabel wordt overgeslagen.")
+
+        # Log de chat ALTIJD voor het admin dashboard
         log_chat(
-              db=db, 
+            db=db, 
             prompt=query, 
             response=result["answer"], 
-            provider="local", 
+            provider=result.get("provider", "local"), 
             usage=result.get("usage", {}), 
             cost=result.get("cost", 0.0)
         )
-           
-           
         
     except Exception as e:
+        # Dit vangt fouten op zonder dat de hele API call crasht
         print(f"Database error tijdens opslaan: {e}")
 
     return result
