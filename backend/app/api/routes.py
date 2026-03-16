@@ -87,31 +87,40 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         result["conversation_id"] = conv_id
 
         # --- Logging sectie ---
-        # A. Log AI Verbruik
-        log_ai_usage(
-            db=db,
-            model=result.get("provider", "tinyllama"),
-            prompt_tokens=result.get("usage", {}).get("prompt_tokens", 0) if result.get("usage") else 0,
-            completion_tokens=result.get("usage", {}).get("completion_tokens", 0) if result.get("usage") else 0,
-            total_cost=result.get("cost", 0.0)
-        )
-
-        # B. Log Systeem Alert bij traagheid
-        if result.get("latency_ms", 0) > 10000:
-            log_system_alert(
-                db=db,
-                level="WARNING",
-                message=f"Hoge latency: {result['latency_ms']}ms"
+        try:
+            # Pak de verbruiksdata veilig uit
+            usage_data = result.get("usage") or {}
+            
+            # A. Log AI Verbruik (Positioneel meegeven is veiliger)
+            log_ai_usage(
+                db, 
+                result.get("provider", "tinyllama"),
+                usage_data.get("prompt_tokens", 0),
+                usage_data.get("completion_tokens", 0),
+                result.get("cost", 0.0)
             )
 
-        # C. Algemene chat log
-        log_chat(db, query, result["answer"], result.get("provider", "local"))
+            # B. Log Systeem Alert bij traagheid (> 10 sec)
+            latency = result.get("latency_ms", 0)
+            if latency > 10000:
+                log_system_alert(db, "WARNING", f"Hoge latency: {latency}ms")
+
+            # C. Algemene chat log voor het dashboard
+            log_chat(db, query, result["answer"], result.get("provider", "local"))
+
+        except Exception as log_e:
+            # We printen de fout, maar we blokkeren de 'return result' niet
+            print(f"Logging waarschuwing: {log_e}")
+            # Alleen een kritieke alert sturen als de DB echt plat ligt
+            try:
+                log_system_alert(db, "CRITICAL", f"Chat logging crash: {str(log_e)}")
+            except:
+                pass
 
     except Exception as e:
         db.rollback()
-        print(f"Logging/Database error: {e}")
-        # We sturen geen HTTP error, omdat de AI het antwoord al heeft (result)
-        log_system_alert(db, level="CRITICAL", message=f"Chat logging crash: {str(e)}")
+        print(f"Grote database error: {e}")
+        
 
     return result
 
