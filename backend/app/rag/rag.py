@@ -102,18 +102,19 @@ def add_to_index(chunks: list, source_name: str):
         print(f"❌ Fout bij opslaan index naar schijf: {e}")
 
 def search_docs(query: str, k=2):
-    """Zoekt de meest relevante tekstfragmenten voor een vraag."""
     query = sanitize_query(query)
     model = get_model()
-    
-    # Vertaal vraag naar vector
     emb = model.encode([query])
     D, I = index.search(emb, k)
 
+    print(f"DEBUG: Zoeken naar '{query}'")
+    print(f"DEBUG: Gevonden scores: {D[0]}") # Kijk hier naar de getallen!
+
     results = []
     for score, idx in zip(D[0], I[0]):
-        # Filter op index grenzen en relevantie score (L2 distance)
-        if idx < 0 or idx >= len(documents) or score > 1.5:
+        # Als je scores in de console ziet die hoger zijn dan 1.5, 
+        # dan weet je dat de threshold te streng is.
+        if idx < 0 or idx >= len(documents) or score > 2.0: # Tijdelijk verhoogd naar 2.0
             continue
         
         doc = documents[idx]
