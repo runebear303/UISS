@@ -1,26 +1,26 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date
-from app.database.model import ChatLog, SystemLog, SecurityLog, AIMetric, Conversation, Message
+import datetime
+from app.database.model import ChatLog, SystemLog, SecurityLog, Conversation, Message
 
 # =========================
 # CHAT LOGGING
 # =========================
 def log_chat(
     db: Session,
-    prompt: any, # Veranderd naar any voor robuustheid
+    prompt: any, 
     response: str,
     provider: str,
     usage: dict | None = None,
     cost: float = 0.0
 ):
-    # --- STAP C FIX: VEILIGHEID ---
-    # Forceer prompt en response naar string. 
-    # Dit voorkomt dat Pydantic objecten de DB laten crashen.
+    """
+    Slaat de volledige chat inclusief tokens en kosten op in de chat_logs tabel.
+    Dit is nu de centrale bron voor alle AI-statistieken.
+    """
     clean_prompt = str(prompt)
     clean_response = str(response)
-
-    # Zorg dat usage ALTIJD een dictionary is, ook als er None of een string komt
     safe_usage = usage if isinstance(usage, dict) else {}
 
     chat = ChatLog(
@@ -44,48 +44,36 @@ def log_chat(
 # SYSTEM LOGGING
 # =========================
 def log_system_alert(db: Session, level: str, message: str, module: str = ""):
+    """Slaat systeemmeldingen en fouten op voor het dashboard."""
     system_log = SystemLog(level=level, message=message, module=module)
-    db.add(system_log)
-    db.commit()
+    try:
+        db.add(system_log)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Fout bij opslaan system_log: {e}")
 
 # =========================
 # SECURITY LOGGING
 # =========================
 def log_security_event(db: Session, event_type: str, message: str, ip_address: str = ""):
+    """Logt beveiligingsincidenten zoals prompt injections."""
     security_log = SecurityLog(event_type=event_type, message=message, ip_address=ip_address)
-    db.add(security_log)
-    db.commit()
-
-# =========================
-# AI USAGE LOGGING
-# =========================
-def log_ai_usage(db, model, prompt_tokens: int = 0, completion_tokens: int = 0, total_cost: float = 0.0):
-    """
-    Slaat het AI verbruik op in de database. 
-    Deze versie is flexibel met argumentnamen.
-    """
-    from app.database.model import AIUsage # Zorg dat de import klopt met jouw model
     try:
-        new_usage = AIUsage(
-            model_name=model, # Hier gebruik je de kolomnaam van je database
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
-            cost=total_cost
-        )
-        db.add(new_usage)
+        db.add(security_log)
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"FOUT in logger.py: {e}")
+        print(f"Fout bij opslaan security_log: {e}")
 
 # =========================
-# MONITORING STATS
+# MONITORING STATS (Dashboard Data)
 # =========================
 def get_monitoring_stats(db: Session) -> dict:
-    total_conversations = db.query(func.count(ChatLog.id)).scalar()
-    total_ai_cost = db.query(func.sum(AIMetric.total_cost)).scalar() or 0
-    avg_tokens = db.query(func.avg(AIMetric.total_tokens)).scalar() or 0
+    """Haalt de statistieken op uit de ChatLog tabel voor de grafieken."""
+    total_conversations = db.query(func.count(ChatLog.id)).scalar() or 0
+    total_ai_cost = db.query(func.sum(ChatLog.cost)).scalar() or 0
+    avg_tokens = db.query(func.avg(ChatLog.total_tokens)).scalar() or 0
 
     return {
         "total_conversations": total_conversations,
@@ -97,14 +85,15 @@ def get_monitoring_stats(db: Session) -> dict:
 # CLOUD COST TODAY
 # =========================
 def get_today_cloud_cost(db: Session) -> float:
+    """Berekent de totale AI kosten van de huidige dag."""
     today = date.today()
-    total_cost = db.query(func.sum(AIMetric.total_cost))\
-                   .filter(func.date(AIMetric.created_at) == today)\
+    total_cost = db.query(func.sum(ChatLog.cost))\
+                   .filter(func.date(ChatLog.created_at) == today)\
                    .scalar()
     return total_cost or 0.0
 
 # =========================
-# CONVERSATION & MESSAGES LOGGING
+# CONVERSATION & MESSAGES (Helper functies)
 # =========================
 def log_conversation(db: Session, title: str) -> Conversation:
     conv = Conversation(title=title)
@@ -121,10 +110,12 @@ def log_message(db: Session, conversation: Conversation, role: str, content: str
     return msg
 
 # =========================
-# RETRIEVAL FUNCTIONS
+# RETRIEVAL FUNCTIONS (Voor Admin Dashboard)
 # =========================
 def get_logs(db: Session):
-    return db.query(ChatLog).order_by(ChatLog.created_at.desc()).all()
+    """Haalt de meest recente chats op voor de log-view."""
+    return db.query(ChatLog).order_by(ChatLog.created_at.desc()).limit(100).all()
 
 def get_security_events(db: Session):
+    """Haalt de meest recente beveiligingsincidenten op."""
     return db.query(SecurityLog).order_by(SecurityLog.created_at.desc()).all()
