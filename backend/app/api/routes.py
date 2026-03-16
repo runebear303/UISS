@@ -19,6 +19,7 @@ from app.config import MAX_INPUT_CHARS
 from app.crud.crud_conversation import get_conversations
 from app.crud.crud_messsage import create_message, get_messages
 from app.services.logger import (
+    
     log_chat, 
     log_system_alert, 
     log_security_event, 
@@ -26,7 +27,7 @@ from app.services.logger import (
     get_security_events, 
     get_monitoring_stats
 )
-
+from app.database.model import LLMLog
 router = APIRouter()
 
 # ======================================
@@ -157,6 +158,11 @@ async def upload_document(
     db.commit()
 
     return {"message": "Upload succesvol", "chunks": chunks_created}
+
+@router.get("/admin/performance", tags=["Admin"])
+def get_performance_stats(db: Session = Depends(get_db)):
+        logs = db.query(LLMLog).all()
+        return logs   
 
 
 
