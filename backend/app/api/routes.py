@@ -62,32 +62,75 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
 
     # 4. Opslaan in database
     try:
-        # Gebruik getattr om veilig de ID te zoeken. 
-        # Als de frontend het niet stuurt, wordt conv_id None.
         conv_id = getattr(request, 'conversation_id', None)
-
+        
+        # Check of de conversatie echt bestaat in de DB
+        from app.database.model import Conversation
+        db_conv = None
         if conv_id:
-            # Sla de berichten alleen op als er een geldige conversatie-ID is
-            create_message(db, conversation_id=conv_id, role="user", content=query)
-            create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
-            print(f"DEBUG: Berichten opgeslagen voor conversatie {conv_id}")
-        else:
-            # Dit gebeurt als je direct via /chat test zonder een gesprek te starten
-            print("DEBUG: Geen conversation_id gevonden, Message tabel wordt overgeslagen.")
+            db_conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
 
-        # Log de chat ALTIJD voor het admin dashboard
+        # Als de ID niet bestaat of ongeldig is, maken we een nieuwe aan
+        if not db_conv:
+            print(f"INFO: Conversation ID {conv_id} niet gevonden. Nieuwe aanmaken...")
+            new_c = Conversation(title=query[:30] + "...") # Gebruik begin van de vraag als titel
+            db.add(new_c)
+            db.commit()
+            db.refresh(new_c)
+            conv_id = new_c.id
+            print(f"INFO: Nieuwe conversatie aangemaakt met ID: {conv_id}")
+
+        # Nu kunnen we VEILIG de berichten opslaan
+        create_message(db, conversation_id=conv_id, role="user", content=query)
+        create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
+        
+        # Update ook de result dict zodat de frontend de (nieuwe) ID weet
+        result["conversation_id"] = conv_id
+
+        # Loggen voor admin dashboard
         log_chat(
             db=db, 
             prompt=query, 
             response=result["answer"], 
-            provider=result.get("provider", "local"), 
-            usage=result.get("usage", {}), 
-            cost=result.get("cost", 0.0)
+            provider=result.get("provider", "local")
         )
         
     except Exception as e:
-        # Dit vangt fouten op zonder dat de hele API call crasht
-        print(f"Database error tijdens opslaan: {e}")
+        # Dit is de ultieme veiligheid: de gebruiker krijgt GEEN error 
+        # als alleen het opslaan mislukt. De AI heeft immers al geantwoord.
+        db.rollback()
+        print(f"FOUT bij database opslag (genegeerd voor gebruiker): {e}")
+
+        # A. Sla de berichten op
+        create_message(db, conversation_id=conv_id, role="user", content=query)
+        create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
+
+        # B. Log AI Verbruik (Nieuw!)
+        # Dit vult de statistieken voor je grafieken
+        log_ai_usage(
+            db=db,
+            model_name=result.get("model", "tinyllama"),
+            prompt_tokens=result.get("usage", {}).get("prompt_tokens", 0),
+            completion_tokens=result.get("usage", {}).get("completion_tokens", 0),
+            total_cost=result.get("cost", 0.0)
+        )
+
+        # C. Log Systeem Alert bij traagheid (Nieuw!)
+        # Als TinyLlama er langer dan 10 seconden over doet, willen we dat weten
+        if result.get("latency_ms", 0) > 10000:
+            log_system_alert(
+                db=db,
+                level="WARNING",
+                message=f"Hoge latency gedetecteerd: {result['latency_ms']}ms voor TinyLlama"
+            )
+
+        # D. Algemene chat log
+        log_chat(db, query, result["answer"], result.get("provider", "local"))
+
+    except Exception as e:
+        # Als er iets misgaat in de logging, willen we een kritieke alert
+        log_system_alert(db, level="CRITICAL", message=f"Logging crash: {str(e)}")
+        print(f"Logging error: {e}")
 
     return result
   
