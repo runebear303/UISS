@@ -13,7 +13,7 @@ from app.services.ai_metrics import AIMetrics
 # 1. CONFIGURATIE & INITIALISATIE
 # ===============================
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-ollama_client = Client(host=OLLAMA_HOST)
+ollama_client = Client(host=OLLAMA_HOST, timeout=300.0)
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 _model = None
@@ -101,7 +101,7 @@ def add_to_index(chunks: list, source_name: str):
     except Exception as e:
         print(f"❌ Fout bij opslaan index naar schijf: {e}")
 
-def search_docs(query: str, k=5):
+def search_docs(query: str, k=2):
     """Zoekt de meest relevante tekstfragmenten voor een vraag."""
     query = sanitize_query(query)
     model = get_model()
