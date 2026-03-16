@@ -19,14 +19,19 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[int] = None
 
 
+
 class ChatResponse(BaseModel):
     answer: str
-    sources: List[Source]
-    confidence: float
+    # Verander List[Source] naar List[Any] om validatiefouten te voorkomen
+    sources: List[Any] = [] 
+    confidence: float = 0.0
     provider: str
-    cost: float
-    latency_ms: int
+    cost: float = 0.0
+    latency_ms: int = 0
     usage: Optional[Dict[str, Any]] = None
+    # VOEG DEZE TOE: je routes.py probeert dit te sturen, 
+    # maar het stond nog niet in je schema!
+    conversation_id: Optional[int] = None
 
 
 # ===============================
