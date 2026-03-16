@@ -148,7 +148,7 @@ def get_answer(user_query: str):
     start_time = time.time()
     try:
         # 1. Context ophalen
-        context_chunks = search_docs(user_query, k=1)
+        context_chunks = search_docs(user_query, k=2)
         context_text = "\n".join(context_chunks) if context_chunks else "Geen relevante informatie gevonden."
 
         # 2. Prompt samenstellen
