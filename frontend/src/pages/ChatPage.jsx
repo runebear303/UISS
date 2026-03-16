@@ -1,20 +1,23 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Message from "../components/Chat/Message";
 import Sidebar from "../components/Layout/Sidebar";
 
 const ChatPage = () => {
     const [messages, setMessages] = useState([
-        { role: 'ai', content: ' Hallo! Ik ben het UNASAT Intelligent Support System. Hoe kan ik u vandaag helpen?' }
+        { role: 'ai', content: 'Hallo! Ik ben het UNASAT Intelligent Support System. Hoe kan ik u vandaag helpen?' }
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [activeConversationId, setActiveConversationId] = useState(null);
     const [chats] = useState([]);
 
     const handleSend = async () => {
+        // Voorkom lege berichten of dubbel verzenden
         if (!input.trim() || isLoading) return;
 
         const userMessage = { role: 'user', content: input };
         setMessages(prev => [...prev, userMessage]);
+
         const currentQuery = input;
         setInput('');
         setIsLoading(true);
@@ -25,7 +28,7 @@ const ChatPage = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     question: currentQuery,
-                    conversation_id: 1
+                    conversation_id: activeConversationId
                 }),
             });
 
@@ -33,28 +36,38 @@ const ChatPage = () => {
 
             const data = await response.json();
 
+            // Werk de ID bij voor de volgende vraag in dit gesprek
+            if (data.conversation_id && data.conversation_id !== activeConversationId) {
+                setActiveConversationId(data.conversation_id);
+            }
+
             setMessages(prev => [...prev, {
                 role: 'ai',
-                content: data.answer
+                content: data.answer || "Ik heb geen antwoord kunnen vinden in de documenten."
             }]);
 
         } catch (error) {
             console.error("Connection Error:", error);
             setMessages(prev => [...prev, {
                 role: 'ai',
-                content: "Error: I couldn't reach the UISS server. Please ensure the FastAPI backend and Ollama Docker are running."
+                content: "Error: De server is onbereikbaar. Controleer of de backend draait."
             }]);
         } finally {
             setIsLoading(false);
         }
     };
 
+    const startNewChat = () => {
+        setMessages([{ role: 'ai', content: 'Nieuwe sessie gestart. Hoe kan ik helpen?' }]);
+        setActiveConversationId(null);
+    };
+
     return (
         <div style={styles.container}>
             <Sidebar
                 chats={chats}
-                onNew={() => setMessages([{ role: 'ai', content: 'New session started. How can I help?' }])}
-                onSelect={(id) => console.log("Switching to chat:", id)}
+                onNew={startNewChat}
+                onSelect={(id) => setActiveConversationId(id)}
             />
 
             <main style={styles.main}>
@@ -63,7 +76,6 @@ const ChatPage = () => {
                 </header>
 
                 <div style={styles.chatWindow}>
-                    {/* --- THIS IS WHERE THE MAP WAS --- */}
                     {messages.map((msg, index) => (
                         <Message
                             key={index}
@@ -87,8 +99,13 @@ const ChatPage = () => {
                             style={styles.input}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Ask a question about regulations..."
+                            // Gebruik onKeyDown in plaats van onKeyPress
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleSend();
+                                }
+                            }}
+                            placeholder="Stel een vraag over de reglementen..."
                             disabled={isLoading}
                         />
                         <button
