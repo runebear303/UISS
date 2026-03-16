@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Message from "../components/Chat/Message";
 import Sidebar from "../components/Layout/Sidebar";
 
@@ -9,10 +9,43 @@ const ChatPage = () => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [activeConversationId, setActiveConversationId] = useState(null);
-    const [chats] = useState([]);
+    const [chats, setChats] = useState([]);
+
+    // 1. Haal de gespreksgeschiedenis op bij het opstarten
+    useEffect(() => {
+        const fetchChats = async () => {
+            try {
+                const response = await fetch('http://localhost:8000/api/conversations');
+                if (response.ok) {
+                    const data = await response.json();
+                    setChats(data);
+                }
+            } catch (err) {
+                console.error("Kon chats niet laden:", err);
+            }
+        };
+        fetchChats();
+    }, []);
+
+    // 2. Haal berichten op als een gebruiker een chat selecteert
+    useEffect(() => {
+        if (activeConversationId) {
+            const fetchMessages = async () => {
+                try {
+                    const response = await fetch(`http://localhost:8000/api/conversations/${activeConversationId}/messages`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setMessages(data.map(m => ({ role: m.role, content: m.content })));
+                    }
+                } catch (err) {
+                    console.error("Berichten laden mislukt:", err);
+                }
+            };
+            fetchMessages();
+        }
+    }, [activeConversationId]);
 
     const handleSend = async () => {
-        // Voorkom lege berichten of dubbel verzenden
         if (!input.trim() || isLoading) return;
 
         const userMessage = { role: 'user', content: input };
@@ -36,21 +69,21 @@ const ChatPage = () => {
 
             const data = await response.json();
 
-            // Werk de ID bij voor de volgende vraag in dit gesprek
             if (data.conversation_id && data.conversation_id !== activeConversationId) {
                 setActiveConversationId(data.conversation_id);
+                setChats(prev => [{ id: data.conversation_id, title: currentQuery.substring(0, 30) + "..." }, ...prev]);
             }
 
             setMessages(prev => [...prev, {
                 role: 'ai',
-                content: data.answer || "Ik heb geen antwoord kunnen vinden in de documenten."
+                content: data.answer || "Ik heb geen antwoord kunnen vinden."
             }]);
 
         } catch (error) {
             console.error("Connection Error:", error);
             setMessages(prev => [...prev, {
                 role: 'ai',
-                content: "Error: De server is onbereikbaar. Controleer of de backend draait."
+                content: "Error: De server is onbereikbaar. Controleer de backend."
             }]);
         } finally {
             setIsLoading(false);
@@ -68,6 +101,7 @@ const ChatPage = () => {
                 chats={chats}
                 onNew={startNewChat}
                 onSelect={(id) => setActiveConversationId(id)}
+                activeId={activeConversationId}
             />
 
             <main style={styles.main}>
@@ -99,11 +133,8 @@ const ChatPage = () => {
                             style={styles.input}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            // Gebruik onKeyDown in plaats van onKeyPress
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    handleSend();
-                                }
+                                if (e.key === 'Enter') handleSend();
                             }}
                             placeholder="Stel een vraag over de reglementen..."
                             disabled={isLoading}
