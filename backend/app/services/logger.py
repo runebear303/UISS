@@ -59,22 +59,25 @@ def log_security_event(db: Session, event_type: str, message: str, ip_address: s
 # =========================
 # AI USAGE LOGGING
 # =========================
-def log_ai_usage(db: Session, provider: str, usage: dict | None = None, cost: float = 0.0):
-    # Ook hier veiligheid toevoegen voor de usage dictionary
-    safe_usage = usage if isinstance(usage, dict) else {}
-    
-    ai_log = AIMetric(
-        provider=provider,
-        total_requests=1,
-        total_tokens=safe_usage.get("total_tokens", 0),
-        total_cost=cost
-    )
+def log_ai_usage(db, model, prompt_tokens: int = 0, completion_tokens: int = 0, total_cost: float = 0.0):
+    """
+    Slaat het AI verbruik op in de database. 
+    Deze versie is flexibel met argumentnamen.
+    """
+    from app.database.model import AIUsage # Zorg dat de import klopt met jouw model
     try:
-        db.add(ai_log)
+        new_usage = AIUsage(
+            model_name=model, # Hier gebruik je de kolomnaam van je database
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            cost=total_cost
+        )
+        db.add(new_usage)
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"DATABASE ERROR in log_ai_usage: {e}")
+        print(f"FOUT in logger.py: {e}")
 
 # =========================
 # MONITORING STATS
