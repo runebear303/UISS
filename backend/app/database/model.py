@@ -118,3 +118,12 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     conversation = relationship("Conversation", back_populates="messages")
+class LLMLog(Base):
+    __tablename__ = "llm_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    prompt_length = Column(Integer)  # Lengte van de vraag
+    response_time = Column(Float)    # Latency in seconden of ms
+    docs_retrieved = Column(Integer) # Hoeveel chunks k=X vond
+    status = Column(String(20))      # 'SUCCESS' of 'ERROR'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  
