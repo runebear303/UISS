@@ -148,19 +148,19 @@ def get_answer(user_query: str):
     start_time = time.time()
     try:
         # 1. Context ophalen
-        context_chunks = search_docs(user_query, k=3)
+        context_chunks = search_docs(user_query, k=1)
         context_text = "\n".join(context_chunks) if context_chunks else "Geen relevante informatie gevonden."
 
         # 2. Prompt samenstellen
         system_msg = (
-            "Je bent de UISS Assistent. Jouw doel is om EÉN specifiek antwoord te geven op de vraag van de gebruiker.\n"
+    "Je bent de UISS Assistent. Jouw doel is om EÉN specifiek antwoord te geven op de vraag van de gebruiker.\n"
     "STRIKTE REGELS:\n"
     "1. Geef alleen het antwoord op de gestelde vraag.\n"
     "2. Noem geen andere vragen of antwoorden uit de context.\n"
     "3. Als de context meerdere Q&A paren bevat, kies dan alleen de meest relevante.\n"
     "4. Formuleer een natuurlijke zin, kopieer niet letterlijk de hele tekst.\n\n"
     f"CONTEXT:\n{context_text}"
-        )
+)
 
         # 3. Ollama aanroepen
         response = ollama_client.generate(
