@@ -36,7 +36,8 @@ def run_evaluation():
     print(f"🚀 Start evaluatie van 20 vragen op {API_URL}...")
 
     for i, query in enumerate(test_queries, 1):
-        payload = {"message": query}
+        payload = {"question": query,
+    "conversation_id": None}
         start_time = time.time()
         
         try:
