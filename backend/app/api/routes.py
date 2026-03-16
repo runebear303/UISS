@@ -90,7 +90,7 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         # A. Log AI Verbruik
         log_ai_usage(
             db=db,
-            model_name=result.get("provider", "tinyllama"),
+            model=result.get("provider", "tinyllama"),
             prompt_tokens=result.get("usage", {}).get("prompt_tokens", 0) if result.get("usage") else 0,
             completion_tokens=result.get("usage", {}).get("completion_tokens", 0) if result.get("usage") else 0,
             total_cost=result.get("cost", 0.0)
