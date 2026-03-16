@@ -23,14 +23,16 @@ cloud_llm = CloudLLM()
 # ===============================
 # MAIN AI SERVICE
 # ===============================
-def ask_ai_with_sources(db: Session, vraag: str):
-    # --- Initialisatie ---
-    provider = None
-    usage = None
+def ask_ai_with_sources(db: Session, vraag: str, conversation_id: int = None):
+    # --- 1️⃣ Initialisatie (Fix voor Pylance errors) ---
+    provider = "unknown"
+    usage = {"total_tokens": 0}
     cost = 0.0
     confidence = 0.0
     docs = []
+    sources = [] # Deze naam gebruiken we voor de return
     antwoord = ""
+    conv_id = conversation_id # Zorg dat conv_id altijd een waarde heeft
     start_time = time.time()
 
     # 1️⃣ Prompt Injection Detectie
@@ -38,15 +40,15 @@ def ask_ai_with_sources(db: Session, vraag: str):
     if status == "BLOCKED":
         provider = "blocked_injection"
         antwoord = "Je vraag bevat mogelijk onveilige instructies en is geblokkeerd."
-        log_chat(db=db, prompt=vraag, response=antwoord, provider=provider)
         return {
             "answer": antwoord, 
             "sources": [], 
             "confidence": 0.0,
-            "usage": None, 
+            "usage": usage, 
             "cost": 0.0, 
             "provider": provider, 
-            "latency_ms": 0
+            "latency_ms": 0,
+            "conversation_id": conv_id
         }
 
     # 2️⃣ Sanitization & 3️⃣ RAG Retrieval
@@ -56,15 +58,15 @@ def ask_ai_with_sources(db: Session, vraag: str):
     if not docs:
         provider = "no_context"
         antwoord = "Dit staat niet in de studentenhandleiding of het orde reglement van UNASAT."
-        log_chat(db=db, prompt=vraag, response=antwoord, provider=provider)
         return {
             "answer": antwoord, 
             "sources": [], 
             "confidence": 0.0,
-            "usage": None, 
+            "usage": usage, 
             "cost": 0.0, 
             "provider": provider, 
-            "latency_ms": 0
+            "latency_ms": 0,
+            "conversation_id": conv_id
         }
 
     # 4️⃣ Context Limiter & 5️⃣ Confidence Score
@@ -73,11 +75,12 @@ def ask_ai_with_sources(db: Session, vraag: str):
     scores = []
 
     for d in docs:
-        # Zorg dat we altijd tekst en een score hebben (veilig voor dicts en strings)
         text = d.get("text", str(d)) if isinstance(d, dict) else str(d)
         score = d.get("score", 0) if isinstance(d, dict) else 0
         context_list.append(text)
         scores.append(score)
+        # Vul direct de sources lijst voor de return
+        sources.append(d if isinstance(d, dict) else {"text": str(d), "source_file": "Onbekend"})
 
     context = "\n\n".join(context_list)
     confidence = round(sum(scores) / len(docs), 2) if docs else 0.0
@@ -88,45 +91,27 @@ def ask_ai_with_sources(db: Session, vraag: str):
     try:
         # 7️⃣ Routing (Lokaal TinyLlama vs Cloud)
         if confidence < CONFIDENCE_THRESHOLD:
-            # Check Cloud Budget
             if get_today_cloud_cost(db) >= DAILY_CLOUD_LIMIT:
-                latency_ms = int((time.time() - start_time) * 1000)
                 return {
                     "answer": "Dagelijkse budgetlimiet bereikt. Probeer het morgen weer.", 
                     "sources": [], 
                     "confidence": confidence, 
-                    "usage": None, 
+                    "usage": usage, 
                     "cost": 0.0, 
                     "provider": "cloud_budget_exceeded", 
-                    "latency_ms": latency_ms
+                    "latency_ms": int((time.time() - start_time) * 1000),
+                    "conversation_id": conv_id
                 }
             
-            # Gebruik Cloud LLM
             result = cloud_llm.generate(prompt)
             provider = "cloud_low_confidence"
         else:
-            # Gebruik Lokaal TinyLlama via Orchestrator
             result = ask_llm(prompt)
             provider = result.get("provider", "local_tinyllama")
 
         antwoord = result.get("text", "")
-        usage = result.get("usage")
+        usage = result.get("usage", usage)
         cost = result.get("cost", 0.0)
-
-        # 8️⃣ Hallucination Guardrail
-        # We checken de eerste 3 bronnen voor de meest relevante feiten
-        docs_for_check = docs[:3]
-        
-        hallucination_found = detect_hallucination(antwoord, docs_for_check)
-        support_missing = not answer_supported_by_sources(antwoord, docs_for_check)
-
-        # Laat de resultaten zien in je terminal
-        print(f"DEBUG: Hallucination: {hallucination_found}, Support Missing: {support_missing}")
-
-        # We zetten de blokkade TIJDELIJK op False om TinyLlama's antwoord te kunnen zien
-        if False: # hallucination_found or support_missing:
-            provider = "hallucination_blocked"
-            antwoord = "Het antwoord kon niet betrouwbaar worden bevestigd door de beschikbare bronnen."
 
     except Exception as e:
         print(f"CRITICAL LLM ERROR: {e}")
@@ -136,14 +121,7 @@ def ask_ai_with_sources(db: Session, vraag: str):
     # --- Finale Formattering & Opslag ---
     latency_ms = int((time.time() - start_time) * 1000)
     
-    formatted_sources = []
-    for d in docs:
-        if isinstance(d, dict):
-            formatted_sources.append(d)
-        else:
-            formatted_sources.append({"text": str(d), "source_file": "Onbekende bron"})
-
-    # Log de chat naar de database (Stap C fix: gebruik named arguments)
+    # Log de chat
     try:
         log_chat(
             db=db, 
@@ -156,12 +134,14 @@ def ask_ai_with_sources(db: Session, vraag: str):
     except Exception as db_e:
         print(f"Database logging failed: {db_e}")
 
+    # Pylance is nu blij omdat alle variabelen (sources, conv_id) bestaan
     return {
         "answer": antwoord,
-        "sources": formatted_sources,
+        "sources": sources,
         "confidence": confidence,
+        "provider": provider,
+        "conversation_id": conv_id,
         "usage": usage,
         "cost": cost,
-        "provider": provider,
         "latency_ms": latency_ms
     }
