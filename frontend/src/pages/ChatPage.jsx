@@ -11,7 +11,6 @@ const ChatPage = () => {
     const [activeConversationId, setActiveConversationId] = useState(null);
     const [chats, setChats] = useState([]);
 
-    // 1. Haal de gespreksgeschiedenis op bij het opstarten
     useEffect(() => {
         const fetchChats = async () => {
             try {
@@ -27,7 +26,6 @@ const ChatPage = () => {
         fetchChats();
     }, []);
 
-    // 2. Haal berichten op als een gebruiker een chat selecteert
     useEffect(() => {
         if (activeConversationId) {
             const fetchMessages = async () => {
@@ -97,6 +95,24 @@ const ChatPage = () => {
 
     return (
         <div style={styles.container}>
+            {/* Voeg de CSS animatie direct toe aan de pagina */}
+            <style>{`
+                @keyframes bounce {
+                    0%, 80%, 100% { transform: scale(0); }
+                    40% { transform: scale(1.0); }
+                }
+                .dot {
+                    width: 8px;
+                    height: 8px;
+                    background-color: #4f46e5;
+                    border-radius: 50%;
+                    display: inline-block;
+                    animation: bounce 1.4s infinite ease-in-out both;
+                }
+                .dot1 { animation-delay: -0.32s; }
+                .dot2 { animation-delay: -0.16s; }
+            `}</style>
+
             <Sidebar
                 chats={chats}
                 onNew={startNewChat}
@@ -118,10 +134,15 @@ const ChatPage = () => {
                         />
                     ))}
 
+                    {/* STAP 1: De Loading Sectie met animatie */}
                     {isLoading && (
                         <div style={styles.aiRow}>
                             <div style={styles.aiBubble}>
-                                <div style={styles.loadingDots}>Thinking...</div>
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center', padding: '4px 0' }}>
+                                    <span className="dot dot1"></span>
+                                    <span className="dot dot2"></span>
+                                    <span className="dot"></span>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -164,8 +185,7 @@ const styles = {
     inputContainer: { borderTop: '1px solid #111', paddingBottom: '20px' },
     inputArea: { padding: '20px', display: 'flex', gap: '12px', maxWidth: '900px', margin: '0 auto', width: '100%' },
     input: { flex: 1, padding: '14px 20px', borderRadius: '12px', border: '1px solid #333', backgroundColor: '#0f0f0f', color: 'white', outline: 'none', fontSize: '15px' },
-    sendBtn: { padding: '0 30px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
-    loadingDots: { fontStyle: 'italic', color: '#888' }
+    sendBtn: { padding: '0 30px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }
 };
 
 export default ChatPage;
