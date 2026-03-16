@@ -38,25 +38,23 @@ model = SentenceTransformer(EMBEDDING_MODEL)
 # CHUNK FUNCTION
 # ===============================
 
-
-def chunk_text(text, chunk_size=500, overlap=50):
-
-    words = text.split()
+def chunk_text(text):
+    """
+    Splitst de tekst specifiek op het woord 'Vraag:', 
+    zodat elk Q&A paar een uniek segment wordt.
+    """
+    # Stap 1: Splits op het trefwoord 'Vraag:'
+    raw_chunks = text.split("Vraag:")
+    
     chunks = []
-
-    start = 0
-
-    while start < len(words):
-
-        end = start + chunk_size
-
-        chunk = " ".join(words[start:end])
-
-        chunks.append(chunk)
-
-        start += chunk_size - overlap
-
+    for chunk in raw_chunks:
+        clean_chunk = chunk.strip()
+        if clean_chunk:
+            # Voeg 'Vraag:' weer toe aan het begin omdat split() dit verwijdert
+            chunks.append(f"Vraag: {clean_chunk}")
+            
     return chunks
+
 
 
 # ===============================
@@ -97,17 +95,15 @@ for pdf_file in pdf_files:
         if len(text) < 100:
             continue
 
-        chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
+        chunks = chunk_text(text) # Geen size/overlap meer nodig
 
         for i, chunk in enumerate(chunks):
-
             documents.append({
                 "text": chunk,
                 "source": pdf_file.name,
                 "page": page_number,
                 "chunk_id": i
             })
-
             texts.append(chunk)
 
 print(f"Total PDFs: {len(pdf_files)}")
