@@ -38,13 +38,13 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
     query = request.question.strip()
     user_ip = http_request.client.host
 
-    # 1. Validatie
+    # 1. Validatie (BEHOUDEN)
     if not query:
         raise HTTPException(status_code=400, detail="Vraag is leeg")
     if len(query) > MAX_INPUT_CHARS:
         raise HTTPException(status_code=413, detail="Input te lang")
 
-    # 2. Security Scan
+    # 2. Security Scan (BEHOUDEN)
     status, reason = detect_prompt_injection(query, user_ip)
     if status == "BLOCKED":
         log_security_event(db, "PROMPT_INJECTION", f"Geblokkeerd: {reason}", user_ip)
@@ -53,13 +53,24 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
     if status == "SUSPICIOUS":
         query = sanitize_prompt(query)
 
-    # 3. AI Processing
+    # 3. AI Processing (AANGEPAST NAAR JOUW RAG.PY)
+    # Importeer get_answer hier of bovenin je bestand
+    from app.rag.rag import get_answer 
+    
     incoming_id = getattr(request, 'conversation_id', None)
-    result = ask_ai_with_sources(db, vraag=query, conversation_id=incoming_id)
+    
+    # We roepen nu jouw nieuwe get_answer aan uit rag.py
+    answer_text = get_answer(query)
+    
+    # Maak het resultaat object handmatig aan zoals je oude ask_ai_with_sources dat deed
+    result = {
+        "answer": answer_text,
+        "conversation_id": incoming_id,
+        "provider": "local_rag"
+    }
 
-    # 4. Opslag & Logging (Silent Fail)
+    # 4. Opslag & Logging (BEHOUDEN - Zorgt dat je chatgeschiedenis werkt!)
     try:
-        # Zorg voor een geldige conversatie
         conv_id = incoming_id
         db_conv = db.query(Conversation).filter(Conversation.id == conv_id).first() if conv_id else None
 
@@ -70,20 +81,18 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
             db.refresh(new_c)
             conv_id = new_c.id
         
-        # Berichten opslaan
         create_message(db, conversation_id=conv_id, role="user", content=query)
         create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
         
         result["conversation_id"] = conv_id
 
-        # Logging voor Dashboard
         log_chat(
             db=db,
             prompt=query,
             response=result["answer"],
-            provider=result.get("provider", "local"),
-            usage=result.get("usage"),
-            cost=result.get("cost", 0.0)
+            provider=result["provider"],
+            usage={"total_tokens": len(answer_text.split())},
+            cost=0.0
         )
 
     except Exception as e:
