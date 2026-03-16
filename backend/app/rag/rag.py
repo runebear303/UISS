@@ -159,10 +159,10 @@ def get_answer(user_query: str):
 
         # 3. Ollama aanroepen
         response = ollama_client.generate(
-            model='llama3',
+            model='tinyllama:latest',
             system=system_msg,
             prompt=user_query,
-            options={"temperature": 0.2}
+            options={"temperature": 0.0}
         )
 
         # 4. Metrics loggen
