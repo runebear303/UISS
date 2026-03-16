@@ -31,7 +31,6 @@ router = APIRouter()
 # ======================================
 # CHAT
 # ======================================
-
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, http_request: Request, db: Session = Depends(get_db)):
     query = request.question.strip()
@@ -47,7 +46,6 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
     status, reason = detect_prompt_injection(query, user_ip)
     
     if status == "BLOCKED":
-        # Log de aanval voordat we de foutmelding geven
         log_security_event(db, "PROMPT_INJECTION", f"Geblokkeerd: {reason}", user_ip)
         raise HTTPException(
             status_code=400, 
@@ -58,81 +56,65 @@ async def chat(request: ChatRequest, http_request: Request, db: Session = Depend
         query = sanitize_prompt(query)
 
     # 3. AI Verwerking (RAG + LLM)
-    result = ask_ai_with_sources(db, query)
+    # Zorg dat je de conversation_id doorgeeft aan de service
+    incoming_id = getattr(request, 'conversation_id', None)
+    result = ask_ai_with_sources(db, vraag=query, conversation_id=incoming_id)
 
-    # 4. Opslaan in database
+    # 4. Opslaan in database & Logging
     try:
-        conv_id = getattr(request, 'conversation_id', None)
-        
-        # Check of de conversatie echt bestaat in de DB
         from app.database.model import Conversation
         db_conv = None
+        conv_id = incoming_id
+
+        # Controleer/Maak conversatie aan
         if conv_id:
             db_conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
 
-        # Als de ID niet bestaat of ongeldig is, maken we een nieuwe aan
         if not db_conv:
             print(f"INFO: Conversation ID {conv_id} niet gevonden. Nieuwe aanmaken...")
-            new_c = Conversation(title=query[:30] + "...") # Gebruik begin van de vraag als titel
+            new_c = Conversation(title=query[:30] + "...")
             db.add(new_c)
             db.commit()
             db.refresh(new_c)
             conv_id = new_c.id
             print(f"INFO: Nieuwe conversatie aangemaakt met ID: {conv_id}")
 
-        # Nu kunnen we VEILIG de berichten opslaan
+        # Sla de berichten op
         create_message(db, conversation_id=conv_id, role="user", content=query)
         create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
         
-        # Update ook de result dict zodat de frontend de (nieuwe) ID weet
+        # Update resultaat voor de frontend
         result["conversation_id"] = conv_id
 
-        # Loggen voor admin dashboard
-        log_chat(
-            db=db, 
-            prompt=query, 
-            response=result["answer"], 
-            provider=result.get("provider", "local")
-        )
-        
-    except Exception as e:
-        # Dit is de ultieme veiligheid: de gebruiker krijgt GEEN error 
-        # als alleen het opslaan mislukt. De AI heeft immers al geantwoord.
-        db.rollback()
-        print(f"FOUT bij database opslag (genegeerd voor gebruiker): {e}")
-
-        # A. Sla de berichten op
-        create_message(db, conversation_id=conv_id, role="user", content=query)
-        create_message(db, conversation_id=conv_id, role="assistant", content=result["answer"])
-
-        # B. Log AI Verbruik (Nieuw!)
-        # Dit vult de statistieken voor je grafieken
+        # --- Logging sectie ---
+        # A. Log AI Verbruik
         log_ai_usage(
             db=db,
-            model_name=result.get("model", "tinyllama"),
-            prompt_tokens=result.get("usage", {}).get("prompt_tokens", 0),
-            completion_tokens=result.get("usage", {}).get("completion_tokens", 0),
+            model_name=result.get("provider", "tinyllama"),
+            prompt_tokens=result.get("usage", {}).get("prompt_tokens", 0) if result.get("usage") else 0,
+            completion_tokens=result.get("usage", {}).get("completion_tokens", 0) if result.get("usage") else 0,
             total_cost=result.get("cost", 0.0)
         )
 
-        # C. Log Systeem Alert bij traagheid (Nieuw!)
-        # Als TinyLlama er langer dan 10 seconden over doet, willen we dat weten
+        # B. Log Systeem Alert bij traagheid
         if result.get("latency_ms", 0) > 10000:
             log_system_alert(
                 db=db,
                 level="WARNING",
-                message=f"Hoge latency gedetecteerd: {result['latency_ms']}ms voor TinyLlama"
+                message=f"Hoge latency: {result['latency_ms']}ms"
             )
 
-        # D. Algemene chat log
+        # C. Algemene chat log
         log_chat(db, query, result["answer"], result.get("provider", "local"))
 
     except Exception as e:
-        # Als er iets misgaat in de logging, willen we een kritieke alert
-        log_system_alert(db, level="CRITICAL", message=f"Logging crash: {str(e)}")
-        print(f"Logging error: {e}")
+        db.rollback()
+        print(f"Logging/Database error: {e}")
+        # We sturen geen HTTP error, omdat de AI het antwoord al heeft (result)
+        log_system_alert(db, level="CRITICAL", message=f"Chat logging crash: {str(e)}")
 
     return result
+
   
 # ======================================
 # STREAM CHAT
