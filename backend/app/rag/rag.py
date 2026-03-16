@@ -153,8 +153,13 @@ def get_answer(user_query: str):
 
         # 2. Prompt samenstellen
         system_msg = (
-            "Je bent de UISS (UNASAT) Assistent. Beantwoord de vraag strikt op basis van de context.\n\n"
-            f"CONTEXT:\n{context_text}"
+            "Je bent de UISS Assistent. Jouw doel is om EÉN specifiek antwoord te geven op de vraag van de gebruiker.\n"
+    "STRIKTE REGELS:\n"
+    "1. Geef alleen het antwoord op de gestelde vraag.\n"
+    "2. Noem geen andere vragen of antwoorden uit de context.\n"
+    "3. Als de context meerdere Q&A paren bevat, kies dan alleen de meest relevante.\n"
+    "4. Formuleer een natuurlijke zin, kopieer niet letterlijk de hele tekst.\n\n"
+    f"CONTEXT:\n{context_text}"
         )
 
         # 3. Ollama aanroepen
