@@ -20,6 +20,9 @@
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    # Dwingt Ollama om tinyllama te downloaden bij start:
+    entrypoint: /bin/sh
+    command: -c "ollama serve & sleep 10 && ollama pull tinyllama && tail -f /dev/null"
 
   backend:
     build:
@@ -33,17 +36,17 @@
       - "8000:8000"
     environment:
       ENV: docker
-      DB_HOST: mysql
+      DB_HOST: uiss_mysql # Match met container_name van mysql
       DB_PORT: 3306
       DB_USER: uiss_user
       DB_PASS: uiss_password
       DB_NAME: uiss_db
-      OLLAMA_URL: http://ollama:11434/api/generate
+      OLLAMA_URL: http://uiss_ollama:11434/api/generate # Match met container_name van ollama
       SECRET_KEY: super_secure_key
     volumes:
       - ./backend:/app
       - /app/venv
-      - ./backend/app/data:/app/app/data # Voor je FAISS index (.faiss en .pkl)
+      - ./backend/app/data:/app/app/data
       - ./backend/app/source/docs:/app/app/source/docs
 
   frontend:
@@ -56,12 +59,10 @@
     ports:
       - "3000:3000"
     environment:
-      # Dit dwingt de frontend om vaker te checken op wijzigingen (nodig voor Windows):
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     volumes:
       - ./frontend:/app
-      # Dit zorgt ervoor dat de node_modules van de container gebruikt worden, niet die van je desktop:
       - /app/node_modules
 
 volumes:
